@@ -1,7 +1,55 @@
 const express = require('express');
 const router = express.Router();
+const auth = require('../middleware/auth');
+const Tunnel = require('../models/Tunnel');
+const TunnelManager = require('../services/TunnelManager');
+const { body, validationResult } = require('express-validator');
 
-// @desc    Tunnel management routes
-// ...
+// @route   POST api/tunnels
+// @desc    Create a tunnel
+// @access  Private
+router.post(
+    '/',
+    [
+        auth,
+        body('localPort', 'Local port is required and must be a number').isInt({ min: 1, max: 65535 }),
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ errors: errors.array() });
+        }
+
+        try {
+            const { localPort, subdomain } = req.body;
+            const options = {
+                requestedSubdomain: subdomain,
+                metadata: {
+                    clientIp: req.ip,
+                    userAgent: req.get('User-Agent')
+                }
+            };
+
+            const tunnel = await TunnelManager.createTunnel(req.user.id, localPort, options);
+            res.status(201).json(tunnel);
+        } catch (error) {
+            console.error('Error creating tunnel:', error.message);
+            res.status(500).json({ msg: error.message || 'Server error while creating tunnel' });
+        }
+    }
+);
+
+// @route   GET api/tunnels
+// @desc    Get user's tunnels
+// @access  Private
+router.get('/', auth, async (req, res) => {
+    try {
+        const tunnels = await Tunnel.find({ userId: req.user.id, isActive: true });
+        res.json(tunnels);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
 
 module.exports = router;

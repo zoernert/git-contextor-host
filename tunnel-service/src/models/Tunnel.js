@@ -16,6 +16,13 @@ const TunnelSchema = new mongoose.Schema({
   },
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, required: true }
+}, {
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+TunnelSchema.virtual('url').get(function() {
+    return `${this.protocol}://${this.subdomain}.${process.env.TUNNEL_DOMAIN || 'localhost.test'}`;
 });
 
 module.exports = mongoose.model('Tunnel', TunnelSchema);
