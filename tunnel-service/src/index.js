@@ -28,7 +28,7 @@ app.get('/api/health', (req, res) => {
 // Mount routers
 app.use('/api/auth', require('./routes/auth'));
 // app.use('/api/tunnels', require('./routes/tunnels'));
-// app.use('/api/subscriptions', require('./routes/subscriptions'));
+app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/admin', require('./routes/admin'));
 
 const PORT = process.env.PORT || 5000;

@@ -6,6 +6,7 @@ const UserSchema = new mongoose.Schema({
   apiKey: { type: String, required: true, unique: true },
   stripeCustomerId: { type: String, required: true },
   isActive: { type: Boolean, default: true },
+  role: { type: String, enum: ['user', 'admin'], default: 'user' },
   plan: { type: String, enum: ['free', 'basic', 'pro', 'enterprise'], default: 'free' },
   usage: {
     tunnelsUsed: { type: Number, default: 0 },

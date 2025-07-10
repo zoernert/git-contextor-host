@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const fetchUser = async () => {
   const token = localStorage.getItem('token');
@@ -82,36 +82,57 @@ export default function UserDashboard() {
         </header>
         <main>
           <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div className="px-4 py-8 sm:px-0">
-              <div className="bg-white shadow sm:rounded-lg">
-                <div className="px-4 py-5 sm:p-6">
-                  <h3 className="text-lg leading-6 font-medium text-gray-900">Your API Key</h3>
-                  <div className="mt-2 max-w-xl text-sm text-gray-500">
-                    <p>Use this key to authenticate with the tunneling service from your tools like Git Contextor.</p>
+            <div className="px-4 py-8 sm:px-0 grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div className="lg:col-span-2">
+                <div className="bg-white shadow sm:rounded-lg">
+                  <div className="px-4 py-5 sm:p-6">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">Your API Key</h3>
+                    <div className="mt-2 max-w-xl text-sm text-gray-500">
+                      <p>Use this key to authenticate with the tunneling service from your tools like Git Contextor.</p>
+                    </div>
+                    <div className="mt-5">
+                        <div className="flex rounded-md shadow-sm">
+                            <input 
+                              type={showKey ? 'text' : 'password'}
+                              readOnly
+                              value={user.apiKey}
+                              className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-l-md focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 bg-gray-50" 
+                            />
+                             <button
+                              onClick={() => setShowKey(!showKey)}
+                              type="button"
+                              className="inline-flex items-center px-3 rounded-none border border-l-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm"
+                            >
+                              {showKey ? 'Hide' : 'Show'}
+                            </button>
+                            <button
+                              onClick={copyToClipboard}
+                              type="button"
+                              className="-ml-px relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-r-md text-gray-700 bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                            >
+                              <span>Copy</span>
+                            </button>
+                        </div>
+                    </div>
                   </div>
-                  <div className="mt-5">
-                      <div className="flex rounded-md shadow-sm">
-                          <input 
-                            type={showKey ? 'text' : 'password'}
-                            readOnly
-                            value={user.apiKey}
-                            className="flex-1 min-w-0 block w-full px-3 py-2 rounded-none rounded-l-md focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm border-gray-300 bg-gray-50" 
-                          />
-                           <button
-                            onClick={() => setShowKey(!showKey)}
-                            type="button"
-                            className="inline-flex items-center px-3 rounded-none border border-l-0 border-gray-300 bg-gray-50 text-gray-500 sm:text-sm"
-                          >
-                            {showKey ? 'Hide' : 'Show'}
-                          </button>
-                          <button
-                            onClick={copyToClipboard}
-                            type="button"
-                            className="-ml-px relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-r-md text-gray-700 bg-gray-50 hover:bg-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                          >
-                            <span>Copy</span>
-                          </button>
-                      </div>
+                </div>
+              </div>
+
+              <div className="lg:col-span-1">
+                <div className="bg-white shadow sm:rounded-lg">
+                  <div className="px-4 py-5 sm:p-6">
+                    <h3 className="text-lg leading-6 font-medium text-gray-900">Subscription</h3>
+                    <div className="mt-2 max-w-xl text-sm text-gray-500">
+                      <p>You are currently on the <span className="font-semibold capitalize">{user.plan}</span> plan.</p>
+                    </div>
+                    <div className="mt-5">
+                      <Link
+                        to="/subscription"
+                        className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                      >
+                        Manage Subscription
+                      </Link>
+                    </div>
                   </div>
                 </div>
               </div>

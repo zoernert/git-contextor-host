@@ -32,6 +32,10 @@ router.post('/register', async (req, res) => {
             stripeCustomerId: stripeCustomer.id,
         });
 
+        if (process.env.ADMIN_EMAIL && email === process.env.ADMIN_EMAIL) {
+            user.role = 'admin';
+        }
+
         const salt = await bcrypt.genSalt(10);
         user.password = await bcrypt.hash(password, salt);
 

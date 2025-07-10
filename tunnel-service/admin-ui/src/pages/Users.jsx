@@ -2,7 +2,10 @@ import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 
 const fetchUsers = async () => {
-  const { data } = await axios.get('/api/admin/users');
+  const token = localStorage.getItem('token');
+  const { data } = await axios.get('/api/admin/users', {
+    headers: { 'x-auth-token': token },
+  });
   return data;
 };
 
@@ -10,7 +13,7 @@ export default function Users() {
   const { data: users, isLoading, isError } = useQuery(['users'], fetchUsers);
 
   if (isLoading) return <div>Loading users...</div>;
-  if (isError) return <div>Error fetching users.</div>;
+  if (isError) return <div className="text-red-500">Error fetching users. You may not have permission to view this page.</div>;
 
   return (
     <div>

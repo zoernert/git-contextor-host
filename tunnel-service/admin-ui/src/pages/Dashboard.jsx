@@ -21,7 +21,10 @@ ChartJS.register(
 );
 
 const fetchAnalytics = async () => {
-  const { data } = await axios.get('/api/admin/analytics');
+  const token = localStorage.getItem('token');
+  const { data } = await axios.get('/api/admin/analytics', {
+    headers: { 'x-auth-token': token },
+  });
   return data;
 };
 
@@ -29,7 +32,7 @@ export default function Dashboard() {
   const { data: analytics, isLoading, isError } = useQuery(['analytics'], fetchAnalytics);
 
   if (isLoading) return <div>Loading...</div>;
-  if (isError) return <div>Error fetching analytics</div>;
+  if (isError) return <div className="text-red-500">Error fetching analytics. You may not have permission to view this page.</div>;
 
   const chartData = {
     labels: ['Users', 'Active Subscriptions', 'Active Tunnels'],

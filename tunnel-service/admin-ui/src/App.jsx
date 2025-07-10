@@ -6,6 +6,7 @@ import Analytics from './pages/Analytics';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import UserDashboard from './pages/UserDashboard';
+import Subscription from './pages/Subscription';
 import PrivateRoute from './components/PrivateRoute';
 
 function App() {
@@ -16,6 +17,7 @@ function App() {
       
       {/* User Routes */}
       <Route path="/dashboard" element={<PrivateRoute><UserDashboard /></PrivateRoute>} />
+      <Route path="/subscription" element={<PrivateRoute><Subscription /></PrivateRoute>} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={<PrivateRoute><Layout /></PrivateRoute>}>

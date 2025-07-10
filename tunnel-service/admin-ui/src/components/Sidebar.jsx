@@ -6,9 +6,9 @@ import {
 } from '@heroicons/react/24/outline';
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: HomeIcon },
-  { name: 'Users', href: '/users', icon: UsersIcon },
-  { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
+  { name: 'Dashboard', href: '/admin/dashboard', icon: HomeIcon },
+  { name: 'Users', href: '/admin/users', icon: UsersIcon },
+  { name: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
 ];
 
 function classNames(...classes) {
@@ -28,7 +28,7 @@ export default function Sidebar() {
               <NavLink
                 key={item.name}
                 to={item.href}
-                end={item.href === '/'}
+                end
                 className={({ isActive }) =>
                   classNames(
                     isActive
