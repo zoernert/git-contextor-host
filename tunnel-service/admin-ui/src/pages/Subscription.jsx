@@ -1,5 +1,5 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { CheckIcon } from '@heroicons/react/24/outline';
@@ -20,13 +20,32 @@ const fetchCurrentUser = async () => {
     return data;
 };
 
+const changePlan = async (planId) => {
+    const token = localStorage.getItem('token');
+    const { data } = await axios.post('/api/subscriptions/change', { planId }, {
+        headers: { 'x-auth-token': token },
+    });
+    return data;
+};
+
 export default function Subscription() {
+    const queryClient = useQueryClient();
     const { data: plans, isLoading: isLoadingPlans } = useQuery(['plans'], fetchPlans);
     const { data: user, isLoading: isLoadingUser } = useQuery(['currentUser'], fetchCurrentUser);
 
+    const mutation = useMutation(changePlan, {
+        onSuccess: () => {
+            queryClient.invalidateQueries(['currentUser']);
+            alert('Plan changed successfully!');
+        },
+        onError: (error) => {
+            alert('Failed to change plan: ' + (error.response?.data?.msg || 'Server error'));
+        }
+    });
+
     const handleChoosePlan = (planId) => {
         // In a real app, this would redirect to a Stripe checkout page
-        alert(`Plan ${planId} selected! Integration with Stripe checkout is pending.`);
+        mutation.mutate(planId);
     };
 
     if (isLoadingPlans || isLoadingUser) {
@@ -84,8 +103,8 @@ export default function Subscription() {
                                     <div className="mt-8">
                                         <button
                                             onClick={() => handleChoosePlan(plan.id)}
-                                            disabled={user?.plan === plan.id}
-                                            className={`w-full px-6 py-3 border border-transparent rounded-md shadow-sm text-center font-medium ${user?.plan === plan.id ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                                            disabled={user?.plan === plan.id || mutation.isLoading}
+                                            className={`w-full px-6 py-3 border border-transparent rounded-md shadow-sm text-center font-medium ${user?.plan === plan.id ? 'bg-gray-400 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50'}`}
                                         >
                                             {user?.plan === plan.id ? 'Current Plan' : `Choose ${plan.name}`}
                                         </button>

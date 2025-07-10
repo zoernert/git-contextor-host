@@ -15,15 +15,10 @@ class TunnelManager {
     this.connections = new Map(); // Map<connectionId, WebSocket>
   }
   async createTunnel(userId, localPort, options = {}) {
-    // 1. Validate user subscription and limits
+    // 1. Validate user exists (subscription limits are checked in middleware)
     const user = await User.findById(userId);
     if (!user) {
         throw new Error('User not found');
-    }
-    // TODO: Add actual plan-based limits check from subscription model
-    const existingTunnels = await Tunnel.countDocuments({ userId, isActive: true });
-    if (existingTunnels >= 5) { // Mock limit, should be based on user.plan
-        throw new Error('Tunnel limit reached for your plan.');
     }
 
     // 2. Generate unique subdomain

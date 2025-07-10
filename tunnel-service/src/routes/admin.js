@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const Tunnel = require('../models/Tunnel');
 const auth = require('../middleware/auth');
 const admin = require('../middleware/admin');
 
@@ -62,12 +63,28 @@ router.put('/users/:id', [auth, admin], async (req, res) => {
 // GET /api/admin/analytics - stub
 router.get('/analytics', [auth, admin], async (req, res) => {
     const userCount = await User.countDocuments();
+    const activeTunnels = await Tunnel.countDocuments({ isActive: true });
+    const activeSubscriptions = await User.countDocuments({ plan: { $ne: 'free' } });
+
     res.json({
         users: userCount,
-        subscriptions: { active: 0, churn: 0 },
-        tunnels: { active: 0 },
+        subscriptions: { active: activeSubscriptions, churn: 0 },
+        tunnels: { active: activeTunnels },
         revenue: { monthly: 0 }
     });
+});
+
+// @route   GET /api/admin/tunnels
+// @desc    List all active tunnels
+// @access  Private/Admin
+router.get('/tunnels', [auth, admin], async (req, res) => {
+    try {
+        const tunnels = await Tunnel.find({ isActive: true }).populate('userId', 'email plan');
+        res.json(tunnels);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
 });
 
 module.exports = router;

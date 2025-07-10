@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const subscriptionCheck = require('../middleware/subscription');
 const Tunnel = require('../models/Tunnel');
 const TunnelManager = require('../services/TunnelManager');
 const { body, validationResult } = require('express-validator');
@@ -12,6 +13,7 @@ router.post(
     '/',
     [
         auth,
+        subscriptionCheck,
         body('localPort', 'Local port is required and must be a number').isInt({ min: 1, max: 65535 }),
     ],
     async (req, res) => {
