@@ -1,8 +1,11 @@
 const express = require('express');
+const http = require('http');
+const { WebSocketServer } = require('ws');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
 const cors = require('cors');
 const connectDB = require('./config/database');
+const TunnelManager = require('./services/TunnelManager');
 
 // Load env vars
 dotenv.config();
@@ -11,6 +14,13 @@ dotenv.config();
 connectDB();
 
 const app = express();
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server });
+
+// Handle WebSocket connections
+wss.on('connection', (ws) => {
+    TunnelManager.handleConnection(ws);
+});
 
 // Body parser
 app.use(express.json());
@@ -33,7 +43,7 @@ app.use('/api/admin', require('./routes/admin'));
 
 const PORT = process.env.PORT || 5000;
 
-const server = app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err, promise) => {

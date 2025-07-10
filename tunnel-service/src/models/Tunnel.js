@@ -9,6 +9,7 @@ const TunnelSchema = new mongoose.Schema({
   protocol: { type: String, enum: ['http', 'https'], default: 'https' },
   customDomain: { type: String, default: null },
   connectionId: { type: String, required: true },
+  proxyHostId: { type: Number }, // from Nginx Proxy Manager
   metadata: {
     userAgent: String,
     clientIp: String,

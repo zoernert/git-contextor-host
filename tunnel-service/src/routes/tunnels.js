@@ -52,4 +52,17 @@ router.get('/', auth, async (req, res) => {
     }
 });
 
+// @route   DELETE api/tunnels/:id
+// @desc    Destroy a tunnel
+// @access  Private
+router.delete('/:id', auth, async (req, res) => {
+    try {
+        const result = await TunnelManager.destroyTunnel(req.params.id, req.user.id);
+        res.json(result);
+    } catch (error) {
+        console.error('Error destroying tunnel:', error.message);
+        res.status(500).json({ msg: error.message || 'Server error while destroying tunnel' });
+    }
+});
+
 module.exports = router;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 
@@ -36,6 +36,29 @@ export default function UserDashboard() {
   const { data: tunnels, isLoading: isLoadingTunnels } = useQuery(['tunnels'], fetchTunnels, {
     enabled: !!user, // only fetch tunnels if user is loaded
   });
+
+  const destroyTunnelMutation = useMutation(
+    (tunnelId) => {
+      const token = localStorage.getItem('token');
+      return axios.delete(`/api/tunnels/${tunnelId}`, {
+        headers: { 'x-auth-token': token },
+      });
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries(['tunnels']);
+      },
+      onError: (error) => {
+        alert('Failed to destroy tunnel: ' + (error.response?.data?.msg || 'Server error'));
+      }
+    }
+  );
+
+  const handleDestroyTunnel = (tunnelId) => {
+    if (window.confirm('Are you sure you want to destroy this tunnel?')) {
+        destroyTunnelMutation.mutate(tunnelId);
+    }
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -166,7 +189,13 @@ export default function UserDashboard() {
                                                 <p className="text-sm font-medium text-indigo-600">{tunnel.url}</p>
                                                 <p className="text-sm text-gray-500">Forwarding to localhost:{tunnel.localPort}</p>
                                             </div>
-                                            <button className="text-red-600 hover:text-red-900 text-sm font-medium">Destroy</button>
+                                            <button 
+                                                onClick={() => handleDestroyTunnel(tunnel._id)}
+                                                disabled={destroyTunnelMutation.isLoading}
+                                                className="text-red-600 hover:text-red-900 text-sm font-medium disabled:opacity-50"
+                                            >
+                                                Destroy
+                                            </button>
                                         </li>
                                     ))}
                                 </ul>

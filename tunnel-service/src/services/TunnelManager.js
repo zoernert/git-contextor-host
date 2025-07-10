@@ -11,6 +11,9 @@ const nginxManager = new NginxManager(
 
 // Core tunneling logic
 class TunnelManager {
+  constructor() {
+    this.connections = new Map(); // Map<connectionId, WebSocket>
+  }
   async createTunnel(userId, localPort, options = {}) {
     // 1. Validate user subscription and limits
     const user = await User.findById(userId);
@@ -38,6 +41,7 @@ class TunnelManager {
         localPort,
         subdomain,
         connectionId,
+        proxyHostId: proxyConfig.id,
         metadata: options.metadata || {},
         expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 hours expiry
         targetHost: 'localhost', // The client will connect to this service, so target is here.
@@ -51,14 +55,67 @@ class TunnelManager {
   }
 
   async destroyTunnel(tunnelId, userId) {
-    // 1. Validate ownership
-    // 2. Remove Nginx configuration
-    // 3. Close WebSocket connections
-    // 4. Update database
+    const tunnel = await Tunnel.findOne({ _id: tunnelId, userId });
+
+    if (!tunnel) {
+        throw new Error('Tunnel not found or permission denied.');
+    }
+
+    if (tunnel.proxyHostId) {
+      await nginxManager.deleteProxyHost(tunnel.proxyHostId);
+    }
+
+    tunnel.isActive = false;
+    await tunnel.save();
+
+    const connection = this.connections.get(tunnel.connectionId);
+    if (connection) {
+        connection.terminate();
+        this.connections.delete(tunnel.connectionId);
+    }
+
+    return { msg: 'Tunnel destroyed' };
   }
 
-  async handleConnection(socket, authToken) {
-    // WebSocket connection handler for tunnel data
+  handleConnection(ws) {
+    // The client should send its connectionId immediately upon connection.
+    ws.once('message', async (message) => {
+        try {
+            const data = JSON.parse(message);
+            const { connectionId } = data;
+
+            if (!connectionId) {
+                ws.terminate();
+                return;
+            }
+
+            const tunnel = await Tunnel.findOne({ connectionId, isActive: true });
+            if (!tunnel) {
+                console.log(`[TunnelManager] Invalid or inactive tunnel for connectionId: ${connectionId}`);
+                ws.terminate();
+                return;
+            }
+            
+            console.log(`[TunnelManager] Client connected for tunnel: ${tunnel.subdomain}`);
+            this.connections.set(connectionId, ws);
+            
+            ws.on('close', () => {
+                console.log(`[TunnelManager] Client disconnected for tunnel: ${tunnel.subdomain}`);
+                this.connections.delete(connectionId);
+            });
+            
+            ws.on('error', (err) => {
+                 console.error(`[TunnelManager] WebSocket error for ${tunnel.subdomain}:`, err);
+                 this.connections.delete(connectionId);
+            });
+
+            // Actual data proxying logic would go here.
+
+        } catch (err) {
+            console.error('[TunnelManager] Error processing auth message from client:', err);
+            ws.terminate();
+        }
+    });
   }
 }
 
