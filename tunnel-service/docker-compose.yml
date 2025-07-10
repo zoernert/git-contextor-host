@@ -1,4 +1,14 @@
 # Development setup for tunnel-service
 version: '3.8'
 services:
-  # MongoDB, Redis, etc. will be added here
+  mongo:
+    image: mongo:latest
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
+    driver: local
