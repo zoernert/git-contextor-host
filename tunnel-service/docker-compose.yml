@@ -1,0 +1,4 @@
+# Development setup for tunnel-service
+version: '3.8'
+services:
+  # MongoDB, Redis, etc. will be added here
