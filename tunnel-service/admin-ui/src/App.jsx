@@ -8,6 +8,7 @@ import Register from './pages/Register';
 import UserDashboard from './pages/UserDashboard';
 import Subscription from './pages/Subscription';
 import PrivateRoute from './components/PrivateRoute';
+import UserEdit from './pages/UserEdit';
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="users" element={<Users />} />
+        <Route path="users/:id/edit" element={<UserEdit />} />
         <Route path="analytics" element={<Analytics />} />
       </Route>
 
