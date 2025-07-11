@@ -14,6 +14,7 @@ const nginxManager = new NginxManager(
 class TunnelManager {
   constructor() {
     this.connections = new Map(); // Map<connectionId, WebSocket>
+    this.httpRequests = new Map(); // Map<requestId, http.ServerResponse>
   }
   async createTunnel(userId, localPort, options = {}) {
     // 1. Validate user exists (subscription limits are checked in middleware)
@@ -73,6 +74,75 @@ class TunnelManager {
     return { msg: 'Tunnel destroyed' };
   }
 
+  async proxyRequest(connectionId, req, res) {
+    const ws = this.connections.get(connectionId);
+    if (!ws || ws.readyState !== ws.OPEN) {
+        return res.status(502).send('Bad Gateway: Tunnel client not connected.');
+    }
+    
+    const requestBody = req.body; // Buffer from raw-body
+
+    // Check usage and track it
+    const canTransfer = await UsageTracker.canTransfer(ws.userId, requestBody.length);
+    if (!canTransfer) {
+        res.status(403).send('Data transfer limit reached.');
+        ws.terminate(); // Terminate the tunnel connection
+        return;
+    }
+    if(requestBody.length > 0) {
+        await UsageTracker.trackData({ _id: ws.tunnelId, userId: ws.userId }, requestBody.length);
+    }
+
+    const requestId = uuidv4();
+    this.httpRequests.set(requestId, res);
+
+    // Clean up if the client closes the connection before we get a response
+    req.on('close', () => {
+        this.httpRequests.delete(requestId);
+    });
+
+    const requestData = {
+        type: 'http-request',
+        requestId,
+        method: req.method,
+        url: req.originalUrl,
+        headers: req.headers,
+        body: requestBody.toString('base64'),
+    };
+
+    ws.send(JSON.stringify(requestData));
+  }
+
+  async handleTunnelResponse(message, ws) {
+    try {
+        const data = JSON.parse(message);
+        if (data.type === 'http-response' && data.requestId) {
+            const res = this.httpRequests.get(data.requestId);
+            if (res) {
+                const responseBody = Buffer.from(data.body, 'base64');
+                // Check usage and track it
+                const canTransfer = await UsageTracker.canTransfer(ws.userId, responseBody.length);
+                if (!canTransfer) {
+                    res.status(403).send('Data transfer limit reached during response.');
+                    this.httpRequests.delete(data.requestId);
+                    ws.terminate();
+                    return;
+                }
+                if (responseBody.length > 0) {
+                   await UsageTracker.trackData({ _id: ws.tunnelId, userId: ws.userId }, responseBody.length);
+                }
+
+                this.httpRequests.delete(data.requestId);
+                res.status(data.status);
+                res.set(data.headers);
+                res.send(responseBody);
+            }
+        }
+    } catch (err) {
+        console.error(`[TunnelManager] Error processing response from client:`, err);
+    }
+  }
+
   handleConnection(ws) {
     // The client should send its connectionId immediately upon connection.
     ws.once('message', async (message) => {
@@ -93,39 +163,20 @@ class TunnelManager {
             }
             
             console.log(`[TunnelManager] Client connected for tunnel: ${tunnel.subdomain}`);
+            ws.tunnelId = tunnel.id;
+            ws.userId = tunnel.userId;
             this.connections.set(connectionId, ws);
             
-            // This is where the actual proxying logic would live.
-            // For now, we will simulate some data transfer to test the usage tracker.
-            let simulate = true;
-            const simulationLoop = async () => {
-                if (!simulate || ws.readyState !== ws.OPEN) return;
-                
-                const simulatedBytes = Math.floor(Math.random() * 1024 * 10); // Simulate up to 10KB
-
-                const canTransfer = await UsageTracker.canTransfer(tunnel.userId, simulatedBytes);
-                if (!canTransfer) {
-                    console.log(`[TunnelManager] Terminating connection for ${tunnel.subdomain} due to data limit.`);
-                    ws.terminate();
-                    return;
-                }
-                
-                await UsageTracker.trackData(tunnel, simulatedBytes);
-                
-                // Schedule next run
-                setTimeout(simulationLoop, 5000);
-            };
-            simulationLoop(); // Start simulation
+            // Handle responses from the tunnel client
+            ws.on('message', (responseMsg) => this.handleTunnelResponse(responseMsg, ws));
 
             ws.on('close', () => {
                 console.log(`[TunnelManager] Client disconnected for tunnel: ${tunnel.subdomain}`);
-                simulate = false;
                 this.connections.delete(connectionId);
             });
             
             ws.on('error', (err) => {
                  console.error(`[TunnelManager] WebSocket error for ${tunnel.subdomain}:`, err);
-                 simulate = false;
                  this.connections.delete(connectionId);
             });
 

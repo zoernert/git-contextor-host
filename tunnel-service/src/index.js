@@ -22,6 +22,41 @@ wss.on('connection', (ws) => {
     TunnelManager.handleConnection(ws);
 });
 
+// Proxy requests to tunnel clients before any body parsers
+const getRawBody = require('raw-body');
+const Tunnel = require('./models/Tunnel');
+
+app.use(async (req, res, next) => {
+    // API requests and the root path should not be proxied
+    if (req.path.startsWith('/api/') || req.path === '/') {
+        return next();
+    }
+
+    const host = req.get('host');
+    const tunnelDomain = process.env.TUNNEL_DOMAIN;
+
+    // Check if it's a request to a tunnel subdomain
+    if (!host || !tunnelDomain || !host.endsWith(`.${tunnelDomain}`)) {
+        return next();
+    }
+    
+    const subdomain = host.substring(0, host.length - tunnelDomain.length - 1);
+    
+    try {
+        const tunnel = await Tunnel.findOne({ subdomain, isActive: true });
+        if (!tunnel) {
+            return res.status(404).json({ msg: `Tunnel for ${host} not found or is not active.` });
+        }
+
+        req.body = await getRawBody(req);
+        TunnelManager.proxyRequest(tunnel.connectionId, req, res);
+
+    } catch (err) {
+        console.error('Proxy error:', err.message);
+        res.status(500).send('Internal Server Error during proxying.');
+    }
+});
+
 // Stripe webhook needs raw body, so we add it before the general JSON parser
 app.use('/api/subscriptions/webhook', express.raw({ type: 'application/json' }));
 

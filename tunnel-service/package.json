@@ -24,7 +24,8 @@
     "uuid": "^9.0.0",
     "ws": "^8.13.0",
     "express-validator": "^7.0.1",
-    "nanoid": "^3.3.6"
+    "nanoid": "^3.3.6",
+    "raw-body": "^2.5.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
