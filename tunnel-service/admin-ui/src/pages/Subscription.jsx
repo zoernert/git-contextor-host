@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { CheckIcon } from '@heroicons/react/24/outline';
 
 const fetchPlans = async () => {
@@ -20,9 +20,9 @@ const fetchCurrentUser = async () => {
     return data;
 };
 
-const changePlan = async (planId) => {
+const createCheckoutSession = async (planId) => {
     const token = localStorage.getItem('token');
-    const { data } = await axios.post('/api/subscriptions/change', { planId }, {
+    const { data } = await axios.post('/api/subscriptions/create-checkout-session', { planId }, {
         headers: { 'x-auth-token': token },
     });
     return data;
@@ -30,21 +30,28 @@ const changePlan = async (planId) => {
 
 export default function Subscription() {
     const queryClient = useQueryClient();
+    const location = useLocation();
     const { data: plans, isLoading: isLoadingPlans } = useQuery(['plans'], fetchPlans);
     const { data: user, isLoading: isLoadingUser } = useQuery(['currentUser'], fetchCurrentUser);
 
-    const mutation = useMutation(changePlan, {
-        onSuccess: () => {
-            queryClient.invalidateQueries(['currentUser']);
-            alert('Plan changed successfully!');
+    const mutation = useMutation(createCheckoutSession, {
+        onSuccess: (data) => {
+            window.location.href = data.url;
         },
         onError: (error) => {
-            alert('Failed to change plan: ' + (error.response?.data?.msg || 'Server error'));
+            alert('Failed to start subscription: ' + (error.response?.data?.msg || 'Server error'));
         }
     });
 
+    useEffect(() => {
+        const query = new URLSearchParams(location.search);
+        if (query.get('session_id')) {
+            alert('Subscription successful! Your plan has been updated.');
+            queryClient.invalidateQueries(['currentUser']);
+        }
+    }, [location, queryClient]);
+
     const handleChoosePlan = (planId) => {
-        // In a real app, this would redirect to a Stripe checkout page
         mutation.mutate(planId);
     };
 

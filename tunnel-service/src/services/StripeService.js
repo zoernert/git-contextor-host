@@ -1,14 +1,14 @@
+const stripe = require('../config/stripe');
+
 // Stripe operations
 class StripeService {
   async createCustomer(email, metadata = {}) {
-    // This is a mock implementation for development.
-    // In a real scenario, you would call the Stripe API.
-    console.log(`Creating mock Stripe customer for ${email}`);
-    return {
-      id: `cus_mock_${Date.now()}`,
-      email,
-      ...metadata,
-    };
+    console.log(`Creating Stripe customer for ${email}`);
+    const customer = await stripe.customers.create({
+        email,
+        metadata
+    });
+    return customer;
   }
 
   async createSubscription(customerId, priceId) {

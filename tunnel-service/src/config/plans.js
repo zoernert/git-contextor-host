@@ -2,6 +2,7 @@ const plans = {
     free: {
         name: 'Free',
         price: '$0/mo',
+        stripePriceId: null,
         limits: {
             maxTunnels: 1,
             maxDataTransfer: 1 // in GB
@@ -11,6 +12,7 @@ const plans = {
     basic: {
         name: 'Basic',
         price: '$5/mo',
+        stripePriceId: process.env.STRIPE_BASIC_PLAN_PRICE_ID,
         limits: {
             maxTunnels: 5,
             maxDataTransfer: 10
@@ -20,6 +22,7 @@ const plans = {
     pro: {
         name: 'Pro',
         price: '$15/mo',
+        stripePriceId: process.env.STRIPE_PRO_PLAN_PRICE_ID,
         limits: {
             maxTunnels: 50, // Effectively unlimited for most
             maxDataTransfer: 50
@@ -29,6 +32,7 @@ const plans = {
     enterprise: {
         name: 'Enterprise',
         price: 'Contact Us',
+        stripePriceId: null,
         limits: {
             maxTunnels: -1, // unlimited
             maxDataTransfer: -1 // unlimited

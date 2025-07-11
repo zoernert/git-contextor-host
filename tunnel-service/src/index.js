@@ -22,6 +22,9 @@ wss.on('connection', (ws) => {
     TunnelManager.handleConnection(ws);
 });
 
+// Stripe webhook needs raw body, so we add it before the general JSON parser
+app.use('/api/subscriptions/webhook', express.raw({ type: 'application/json' }));
+
 // Body parser
 app.use(express.json());
 
