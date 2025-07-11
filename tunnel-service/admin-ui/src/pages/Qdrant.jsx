@@ -19,26 +19,48 @@ const createCollection = async (name) => {
     return data;
 };
 
+const deleteCollection = async (collectionId) => {
+    const token = localStorage.getItem('token');
+    await axios.delete(`/api/qdrant/collections/${collectionId}`, {
+        headers: { 'x-auth-token': token },
+    });
+};
+
 export default function Qdrant() {
     const queryClient = useQueryClient();
     const [newCollectionName, setNewCollectionName] = useState('');
     const { data: collections, isLoading } = useQuery(['qdrantCollections'], fetchCollections);
 
-    const mutation = useMutation(createCollection, {
+    const createMutation = useMutation(createCollection, {
         onSuccess: () => {
             queryClient.invalidateQueries(['qdrantCollections']);
             setNewCollectionName('');
-            alert('Collection created successfully (mocked).');
+            alert('Collection created successfully.');
         },
         onError: (error) => {
             alert('Failed to create collection: ' + (error.response?.data?.msg || 'Server error'));
         }
     });
 
+    const deleteMutation = useMutation(deleteCollection, {
+        onSuccess: () => {
+            queryClient.invalidateQueries(['qdrantCollections']);
+        },
+        onError: (error) => {
+            alert('Failed to delete collection: ' + (error.response?.data?.msg || 'Server error'));
+        }
+    });
+
     const handleCreate = (e) => {
         e.preventDefault();
         if (!newCollectionName) return;
-        mutation.mutate(newCollectionName);
+        createMutation.mutate(newCollectionName);
+    };
+
+    const handleDelete = (collectionId) => {
+        if (window.confirm('Are you sure you want to delete this collection? This action is permanent.')) {
+            deleteMutation.mutate(collectionId);
+        }
     };
 
     return (
@@ -79,10 +101,10 @@ export default function Qdrant() {
                                         </div>
                                         <button
                                             type="submit"
-                                            disabled={mutation.isLoading}
+                                            disabled={createMutation.isLoading}
                                             className="mt-3 w-full inline-flex items-center justify-center px-4 py-2 border border-transparent shadow-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50"
                                         >
-                                            {mutation.isLoading ? 'Creating...' : 'Create'}
+                                            {createMutation.isLoading ? 'Creating...' : 'Create'}
                                         </button>
                                     </div>
                                 </form>
@@ -97,9 +119,19 @@ export default function Qdrant() {
                                         ) : collections && collections.length > 0 ? (
                                             <ul className="divide-y divide-gray-200">
                                                 {collections.map(col => (
-                                                    <li key={col._id} className="py-4">
-                                                        <p className="text-sm font-medium text-gray-900">{col.name}</p>
-                                                        <p className="text-sm text-gray-500">Host: {col.credentials.host}</p>
+                                                    <li key={col._id} className="py-4 flex items-center justify-between">
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-900">{col.name}</p>
+                                                            <p className="text-sm text-gray-500">Host: {col.credentials.host}:{col.credentials.port}</p>
+                                                            <p className="text-xs text-gray-400">Internal Name: {col.collectionName}</p>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleDelete(col._id)}
+                                                            disabled={deleteMutation.isLoading}
+                                                            className="text-red-600 hover:text-red-900 text-sm font-medium disabled:opacity-50"
+                                                        >
+                                                            Delete
+                                                        </button>
                                                     </li>
                                                 ))}
                                             </ul>

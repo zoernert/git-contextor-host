@@ -3,7 +3,6 @@ const mongoose = require('mongoose');
 const QdrantCollectionSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   name: { type: String, required: true },
-  qdrantInstanceId: { type: String, required: true },
   collectionName: { type: String, required: true },
   credentials: {
     host: String,
