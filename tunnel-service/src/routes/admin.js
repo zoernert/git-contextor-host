@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const Tunnel = require('../models/Tunnel');
+const StripeService = require('../services/StripeService');
 const auth = require('../middleware/auth');
 const admin = require('../middleware/admin');
 
@@ -60,18 +61,24 @@ router.put('/users/:id', [auth, admin], async (req, res) => {
     }
 });
 
-// GET /api/admin/analytics - stub
+// GET /api/admin/analytics
 router.get('/analytics', [auth, admin], async (req, res) => {
-    const userCount = await User.countDocuments();
-    const activeTunnels = await Tunnel.countDocuments({ isActive: true });
-    const activeSubscriptions = await User.countDocuments({ plan: { $ne: 'free' } });
+    try {
+        const userCount = await User.countDocuments();
+        const activeTunnels = await Tunnel.countDocuments({ isActive: true });
+        const activeSubscriptions = await User.countDocuments({ plan: { $ne: 'free' } });
+        const monthlyRevenue = await StripeService.calculateMRR();
 
-    res.json({
-        users: userCount,
-        subscriptions: { active: activeSubscriptions, churn: 0 },
-        tunnels: { active: activeTunnels },
-        revenue: { monthly: 0 }
-    });
+        res.json({
+            users: userCount,
+            subscriptions: { active: activeSubscriptions, churn: 0 },
+            tunnels: { active: activeTunnels },
+            revenue: { monthly: monthlyRevenue }
+        });
+    } catch (err) {
+        console.error('Error fetching analytics:', err.message);
+        res.status(500).json({ msg: 'Server error while fetching analytics' });
+    }
 });
 
 // @route   GET /api/admin/tunnels
