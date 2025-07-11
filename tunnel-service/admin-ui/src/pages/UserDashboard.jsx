@@ -206,6 +206,29 @@ export default function UserDashboard() {
                     </div>
                 </div>
 
+                <div className="mt-8 bg-white shadow sm:rounded-lg">
+                    <div className="px-4 py-5 sm:p-6">
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Git Contextor Integration</h3>
+                        <div className="mt-2 max-w-xl text-sm text-gray-500">
+                            <p>Configure your Git Contextor client to use this service for managed tunnels.</p>
+                        </div>
+                        <div className="mt-5">
+                            <p className="text-sm font-medium text-gray-700">Add the following to your Git Contextor configuration file:</p>
+                            <pre className="mt-2 p-3 bg-gray-100 rounded-md text-sm overflow-x-auto">
+                                <code>
+{`"tunneling": {
+    "provider": "managed",
+    "managed": {
+        "apiUrl": "${window.location.origin}",
+        "apiKey": "${user.apiKey}"
+    }
+}`}
+                                </code>
+                            </pre>
+                        </div>
+                    </div>
+                </div>
+
             </div>
           </div>
         </main>
