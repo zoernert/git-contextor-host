@@ -1,21 +1,38 @@
 const jwt = require('jsonwebtoken');
+const User = require('../models/User');
 
-module.exports = function (req, res, next) {
-  // Get token from header
-  const token = req.header('x-auth-token');
-
-  // Check if not token
-  if (!token) {
-    return res.status(401).json({ msg: 'No token, authorization denied' });
+module.exports = async function (req, res, next) {
+  // Check for API Key first (for client integrations like Git Contextor)
+  const authHeader = req.header('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+      const apiKey = authHeader.substring(7, authHeader.length);
+      try {
+          const user = await User.findOne({ apiKey });
+          if (!user) {
+              return res.status(401).json({ msg: 'Invalid API Key' });
+          }
+          if (!user.isActive) {
+              return res.status(403).json({ msg: 'User account is inactive' });
+          }
+          req.user = { id: user.id }; // Set user context for subsequent middleware/routes
+          return next();
+      } catch (err) {
+          console.error(err.message);
+          return res.status(500).send('Server Error');
+      }
   }
 
-  // Verify token
-  try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  // Fallback to JWT for UI sessions
+  const token = req.header('x-auth-token');
+  if (!token) {
+      return res.status(401).json({ msg: 'No token or API Key, authorization denied' });
+  }
 
-    req.user = decoded.user;
-    next();
+  try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded.user;
+      next();
   } catch (err) {
-    res.status(401).json({ msg: 'Token is not valid' });
+      res.status(401).json({ msg: 'Token is not valid' });
   }
 };

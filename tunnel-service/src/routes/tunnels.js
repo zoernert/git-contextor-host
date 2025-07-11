@@ -23,12 +23,13 @@ router.post(
         }
 
         try {
-            const { localPort, subdomain } = req.body;
+            const { localPort, subdomain, gitContextorShare } = req.body;
             const options = {
                 requestedSubdomain: subdomain,
                 metadata: {
                     clientIp: req.ip,
-                    userAgent: req.get('User-Agent')
+                    userAgent: req.get('User-Agent'),
+                    gitContextorShare: !!gitContextorShare
                 }
             };
 
