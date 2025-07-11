@@ -13,9 +13,20 @@ describe('Tunnels API', () => {
     let token;
     let userId;
 
-    beforeAll(async () => {
-        stripe.customers.create.mockResolvedValue({ id: 'cus_mock_tunnel_user' });
+    // Use beforeEach for full isolation
+    beforeEach(async () => {
+        // Clear all mocks and database before each test
+        jest.clearAllMocks();
         await User.deleteMany({});
+        await Tunnel.deleteMany({});
+        await Usage.deleteMany({});
+
+        // Mock external services
+        stripe.customers.create.mockResolvedValue({ id: 'cus_mock_tunnel_user' });
+        NginxManager.mock.instances[0].createProxyHost.mockResolvedValue({ id: 123, scheme: 'https' });
+        NginxManager.mock.instances[0].deleteProxyHost.mockResolvedValue({ message: 'Proxy host deleted' });
+
+        // Create a fresh user and token for each test
         const userRes = await request(app)
             .post('/api/auth/register')
             .send({
@@ -27,12 +38,6 @@ describe('Tunnels API', () => {
         userId = user.id;
     });
 
-    beforeEach(async () => {
-        await Tunnel.deleteMany({});
-        await Usage.deleteMany({});
-        NginxManager.mock.instances[0].createProxyHost.mockResolvedValue({ id: 123, scheme: 'https' });
-        NginxManager.mock.instances[0].deleteProxyHost.mockResolvedValue({ message: 'Proxy host deleted' });
-    });
 
     it('should create a new tunnel for an authenticated user', async () => {
         const res = await request(app)
@@ -69,10 +74,12 @@ describe('Tunnels API', () => {
         const createRes = await request(app).post('/api/tunnels').set('x-auth-token', token).send({ localPort: 3000 });
         const tunnelId = createRes.body._id;
 
+        // Create another user and token
         stripe.customers.create.mockResolvedValue({ id: 'cus_mock_other_user' });
         const otherUserRes = await request(app).post('/api/auth/register').send({ email: 'other@example.com', password: 'password123' });
         const otherToken = otherUserRes.body.token;
 
+        // Attempt to delete with other user's token
         const deleteRes = await request(app).delete(`/api/tunnels/${tunnelId}`).set('x-auth-token', otherToken);
         expect(deleteRes.statusCode).toEqual(500);
         expect(deleteRes.body.msg).toContain('permission denied');

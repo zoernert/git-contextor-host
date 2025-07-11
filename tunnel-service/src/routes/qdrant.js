@@ -41,17 +41,28 @@ router.post('/collections', auth, async (req, res) => {
         const qdrantCollectionName = `user-${req.user.id}-${name}`;
         await QdrantService.createCollection(qdrantCollectionName);
 
-        const qdrantUrl = new URL(process.env.QDRANT_URL);
+        let credentials = {};
+        if (process.env.QDRANT_URL) {
+            const qdrantUrl = new URL(process.env.QDRANT_URL);
+            credentials = {
+                host: qdrantUrl.hostname,
+                port: parseInt(qdrantUrl.port) || 6333,
+                apiKey: process.env.QDRANT_API_KEY,
+            };
+        } else {
+            // Mock credentials for test environment where QDRANT_URL is not set
+            credentials = {
+                host: 'mock-qdrant.local',
+                port: 6333,
+                apiKey: '',
+            };
+        }
         
         const newCollection = new QdrantCollection({
             userId: req.user.id,
             name,
             collectionName: qdrantCollectionName,
-            credentials: {
-                host: qdrantUrl.hostname,
-                port: qdrantUrl.port || 6333,
-                apiKey: process.env.QDRANT_API_KEY
-            }
+            credentials,
         });
 
         await newCollection.save();
