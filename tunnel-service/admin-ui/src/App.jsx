@@ -10,6 +10,7 @@ import Subscription from './pages/Subscription';
 import PrivateRoute from './components/PrivateRoute';
 import UserEdit from './pages/UserEdit';
 import AdminTunnels from './pages/AdminTunnels';
+import Qdrant from './pages/Qdrant';
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
       {/* User Routes */}
       <Route path="/dashboard" element={<PrivateRoute><UserDashboard /></PrivateRoute>} />
       <Route path="/subscription" element={<PrivateRoute><Subscription /></PrivateRoute>} />
+      <Route path="/qdrant" element={<PrivateRoute><Qdrant /></PrivateRoute>} />
 
       {/* Admin Routes */}
       <Route path="/admin" element={<PrivateRoute><Layout /></PrivateRoute>}>

@@ -43,6 +43,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tunnels', require('./routes/tunnels'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/admin', require('./routes/admin'));
+app.use('/api/qdrant', require('./routes/qdrant'));
 
 const PORT = process.env.PORT || 5000;
 

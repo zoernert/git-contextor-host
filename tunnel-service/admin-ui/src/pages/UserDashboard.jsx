@@ -177,6 +177,23 @@ export default function UserDashboard() {
 
                 <div className="mt-8 bg-white shadow sm:rounded-lg">
                     <div className="px-4 py-5 sm:p-6">
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Qdrant Collections</h3>
+                        <div className="mt-2 max-w-xl text-sm text-gray-500">
+                            <p>Manage your hosted Qdrant vector collections for Git Contextor.</p>
+                        </div>
+                        <div className="mt-5">
+                            <Link
+                                to="/qdrant"
+                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            >
+                                Manage Collections
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 bg-white shadow sm:rounded-lg">
+                    <div className="px-4 py-5 sm:p-6">
                         <h3 className="text-lg leading-6 font-medium text-gray-900">Active Tunnels</h3>
                         <div className="mt-4">
                             {isLoadingTunnels ? (
