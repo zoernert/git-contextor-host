@@ -3,11 +3,13 @@ import {
   ChartBarIcon,
   UsersIcon,
   HomeIcon,
+  ServerIcon,
 } from '@heroicons/react/24/outline';
 
 const navigation = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: HomeIcon },
   { name: 'Users', href: '/admin/users', icon: UsersIcon },
+  { name: 'Tunnels', href: '/admin/tunnels', icon: ServerIcon },
   { name: 'Analytics', href: '/admin/analytics', icon: ChartBarIcon },
 ];
 

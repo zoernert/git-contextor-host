@@ -9,6 +9,7 @@ import UserDashboard from './pages/UserDashboard';
 import Subscription from './pages/Subscription';
 import PrivateRoute from './components/PrivateRoute';
 import UserEdit from './pages/UserEdit';
+import AdminTunnels from './pages/AdminTunnels';
 
 function App() {
   return (
@@ -26,6 +27,7 @@ function App() {
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="users" element={<Users />} />
         <Route path="users/:id/edit" element={<UserEdit />} />
+        <Route path="tunnels" element={<AdminTunnels />} />
         <Route path="analytics" element={<Analytics />} />
       </Route>
 

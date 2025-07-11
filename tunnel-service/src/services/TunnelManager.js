@@ -3,6 +3,7 @@ const Tunnel = require('../models/Tunnel');
 const { generateSubdomain } = require('../utils/subdomain');
 const { v4: uuidv4 } = require('uuid');
 const NginxManager = require('./NginxManager');
+const UsageTracker = require('./UsageTracker');
 
 const nginxManager = new NginxManager(
     process.env.NGINX_PROXY_MANAGER_API_URL,
@@ -94,17 +95,29 @@ class TunnelManager {
             console.log(`[TunnelManager] Client connected for tunnel: ${tunnel.subdomain}`);
             this.connections.set(connectionId, ws);
             
+            // This is where the actual proxying logic would live.
+            // For now, we will simulate some data transfer to test the usage tracker.
+            const simulationInterval = setInterval(() => {
+                // If socket is closed, stop simulating.
+                if (ws.readyState !== ws.OPEN) {
+                    clearInterval(simulationInterval);
+                    return;
+                }
+                const simulatedBytes = Math.floor(Math.random() * 1024);
+                UsageTracker.trackData(tunnel, simulatedBytes);
+            }, 5000); // Simulate data every 5 seconds
+
             ws.on('close', () => {
                 console.log(`[TunnelManager] Client disconnected for tunnel: ${tunnel.subdomain}`);
+                clearInterval(simulationInterval);
                 this.connections.delete(connectionId);
             });
             
             ws.on('error', (err) => {
                  console.error(`[TunnelManager] WebSocket error for ${tunnel.subdomain}:`, err);
+                 clearInterval(simulationInterval);
                  this.connections.delete(connectionId);
             });
-
-            // Actual data proxying logic would go here.
 
         } catch (err) {
             console.error('[TunnelManager] Error processing auth message from client:', err);
