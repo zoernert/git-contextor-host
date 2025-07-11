@@ -1,11 +1,17 @@
 const request = require('supertest');
 const app = require('../../src/index');
 const User = require('../../src/models/User');
+const stripe = require('../../src/config/stripe');
+
+jest.mock('../../src/config/stripe');
 
 describe('Auth API', () => {
     beforeEach(async () => {
         // Clear users before each test to ensure isolation
         await User.deleteMany({});
+        // Reset and mock stripe customer creation for auth tests
+        stripe.customers.create.mockClear();
+        stripe.customers.create.mockResolvedValue({ id: 'cus_mock_123' });
     });
 
     it('should register a new user successfully', async () => {
