@@ -25,8 +25,8 @@ class TunnelManager {
     // 2. Generate unique subdomain
     const subdomain = await generateSubdomain(options.requestedSubdomain);
 
-    // 3. Create Nginx proxy configuration (mocked)
-    const proxyConfig = await nginxManager.createProxyHost(subdomain, localPort);
+    // 3. Create Nginx proxy configuration
+    const proxyConfig = await nginxManager.createProxyHost(subdomain);
 
     // 4. Connection ID for WebSocket client to identify itself
     const connectionId = uuidv4();

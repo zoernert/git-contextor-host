@@ -1,14 +1,61 @@
 # Development setup for tunnel-service
 version: '3.8'
 services:
+  app:
+    build: .
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - MONGODB_URI=mongodb://mongo:27017/tunnel-service
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - STRIPE_BASIC_PLAN_PRICE_ID=${STRIPE_BASIC_PLAN_PRICE_ID}
+      - STRIPE_PRO_PLAN_PRICE_ID=${STRIPE_PRO_PLAN_PRICE_ID}
+      - NGINX_PROXY_MANAGER_API_URL=http://nginx-proxy-manager:81/api
+      - NGINX_PROXY_MANAGER_API_KEY=${NGINX_PROXY_MANAGER_API_KEY}
+      - JWT_SECRET=${JWT_SECRET}
+      - ADMIN_EMAIL=${ADMIN_EMAIL}
+      - TUNNEL_DOMAIN=${TUNNEL_DOMAIN}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - PORT=5000
+    depends_on:
+      - mongo
+      - nginx-proxy-manager
+  
   mongo:
     image: mongo:latest
     restart: always
-    ports:
-      - "27017:27017"
     volumes:
       - mongo-data:/data/db
 
+  npm-db:
+    image: 'jc21/mariadb-aria:latest'
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: 'npm'
+      MYSQL_DATABASE: 'npm'
+      MYSQL_USER: 'npm'
+      MYSQL_PASSWORD: 'npm'
+    volumes:
+      - npm-db-data:/var/lib/mysql
+
+  nginx-proxy-manager:
+    image: 'jc21/nginx-proxy-manager:latest'
+    restart: unless-stopped
+    ports:
+      # These ports are in use by docker-compose for this project.
+      - '80:80' # Public HTTP Port
+      - '443:443' # Public HTTPS Port
+      - '81:81' # Admin Web Port
+    depends_on:
+      - npm-db
+    volumes:
+      - npm-data:/data
+      - npm-letsencrypt:/etc/letsencrypt
+
 volumes:
   mongo-data:
-    driver: local
+  npm-db-data:
+  npm-data:
+  npm-letsencrypt:
