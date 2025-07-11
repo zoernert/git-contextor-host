@@ -3,6 +3,8 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const subscriptionCheck = require('../middleware/subscription');
 const Tunnel = require('../models/Tunnel');
+const Usage = require('../models/Usage');
+const mongoose = require('mongoose');
 const TunnelManager = require('../services/TunnelManager');
 const { body, validationResult } = require('express-validator');
 
@@ -65,6 +67,37 @@ router.delete('/:id', auth, async (req, res) => {
     } catch (error) {
         console.error('Error destroying tunnel:', error.message);
         res.status(500).json({ msg: error.message || 'Server error while destroying tunnel' });
+    }
+});
+
+// @route   GET api/tunnels/:id/stats
+// @desc    Get tunnel statistics
+// @access  Private
+router.get('/:id/stats', auth, async (req, res) => {
+    try {
+        const tunnel = await Tunnel.findOne({ _id: req.params.id, userId: req.user.id });
+        if (!tunnel) {
+            return res.status(404).json({ msg: 'Tunnel not found or permission denied.' });
+        }
+
+        const stats = await Usage.aggregate([
+            { $match: { tunnelId: new mongoose.Types.ObjectId(tunnel.id) } },
+            { $group: {
+                _id: '$tunnelId',
+                totalDataTransferred: { $sum: '$dataTransferred' }
+            }}
+        ]);
+
+        const totalData = stats.length > 0 ? stats[0].totalDataTransferred : 0;
+        
+        res.json({
+            tunnelId: tunnel._id,
+            totalDataTransferred: totalData, // in bytes
+        });
+
+    } catch (err) {
+        console.error('Error fetching tunnel stats:', err.message);
+        res.status(500).send('Server Error');
     }
 });
 
