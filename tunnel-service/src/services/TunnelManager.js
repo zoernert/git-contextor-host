@@ -97,25 +97,35 @@ class TunnelManager {
             
             // This is where the actual proxying logic would live.
             // For now, we will simulate some data transfer to test the usage tracker.
-            const simulationInterval = setInterval(() => {
-                // If socket is closed, stop simulating.
-                if (ws.readyState !== ws.OPEN) {
-                    clearInterval(simulationInterval);
+            let simulate = true;
+            const simulationLoop = async () => {
+                if (!simulate || ws.readyState !== ws.OPEN) return;
+                
+                const simulatedBytes = Math.floor(Math.random() * 1024 * 10); // Simulate up to 10KB
+
+                const canTransfer = await UsageTracker.canTransfer(tunnel.userId, simulatedBytes);
+                if (!canTransfer) {
+                    console.log(`[TunnelManager] Terminating connection for ${tunnel.subdomain} due to data limit.`);
+                    ws.terminate();
                     return;
                 }
-                const simulatedBytes = Math.floor(Math.random() * 1024);
-                UsageTracker.trackData(tunnel, simulatedBytes);
-            }, 5000); // Simulate data every 5 seconds
+                
+                await UsageTracker.trackData(tunnel, simulatedBytes);
+                
+                // Schedule next run
+                setTimeout(simulationLoop, 5000);
+            };
+            simulationLoop(); // Start simulation
 
             ws.on('close', () => {
                 console.log(`[TunnelManager] Client disconnected for tunnel: ${tunnel.subdomain}`);
-                clearInterval(simulationInterval);
+                simulate = false;
                 this.connections.delete(connectionId);
             });
             
             ws.on('error', (err) => {
                  console.error(`[TunnelManager] WebSocket error for ${tunnel.subdomain}:`, err);
-                 clearInterval(simulationInterval);
+                 simulate = false;
                  this.connections.delete(connectionId);
             });
 

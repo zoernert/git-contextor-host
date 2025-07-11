@@ -177,6 +177,22 @@ export default function UserDashboard() {
 
                 <div className="mt-8 bg-white shadow sm:rounded-lg">
                     <div className="px-4 py-5 sm:p-6">
+                        <h3 className="text-lg leading-6 font-medium text-gray-900">Data Usage</h3>
+                        <div className="mt-2 max-w-xl text-sm text-gray-500">
+                           <p>
+                             You have used { (user.usage.dataTransferred / (1024*1024*1024)).toFixed(4) } GB of data this cycle.
+                           </p>
+                        </div>
+                        <div className="mt-3">
+                           <p className="text-xs text-gray-400">
+                             Usage resets monthly on { new Date(user.usage.resetDate).toLocaleDateString() }.
+                           </p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-8 bg-white shadow sm:rounded-lg">
+                    <div className="px-4 py-5 sm:p-6">
                         <h3 className="text-lg leading-6 font-medium text-gray-900">Qdrant Collections</h3>
                         <div className="mt-2 max-w-xl text-sm text-gray-500">
                             <p>Manage your hosted Qdrant vector collections for Git Contextor.</p>

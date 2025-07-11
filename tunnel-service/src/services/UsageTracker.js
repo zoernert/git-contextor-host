@@ -1,30 +1,68 @@
 const Usage = require('../models/Usage');
 const User = require('../models/User');
+const plansConfig = require('../config/plans');
 
-// Usage monitoring service
 class UsageTracker {
-  async trackData(tunnel, dataAmount) {
-    if (!tunnel || !tunnel.userId) return;
+    /**
+     * Checks if a user is allowed to transfer a certain amount of data.
+     * This method also handles the monthly reset of the data usage counter.
+     * @param {string} userId - The ID of the user.
+     * @param {number} dataAmount - The amount of data in bytes to be transferred.
+     * @returns {Promise<boolean>} - True if transfer is allowed, false otherwise.
+     */
+    async canTransfer(userId, dataAmount) {
+        try {
+            let user = await User.findById(userId);
+            if (!user) return false;
 
-    try {
-        // This is a simplified implementation. In a real-world scenario, you'd likely
-        // batch updates to avoid hitting the database on every small data packet.
-        
-        // Update total usage on the User model
-        await User.findByIdAndUpdate(tunnel.userId, {
-            $inc: { 'usage.dataTransferred': dataAmount }
-        });
+            // Check if usage needs to be reset (monthly cycle)
+            const now = new Date();
+            const resetDate = new Date(user.usage.resetDate);
+            const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-        // Optionally, create a detailed usage record
-        await Usage.create({
-            userId: tunnel.userId,
-            tunnelId: tunnel._id,
-            dataTransferred: dataAmount
-        });
-    } catch (err) {
-        console.error(`Error tracking usage for tunnel ${tunnel._id}:`, err.message);
+            if (now.getTime() - resetDate.getTime() > THIRTY_DAYS_MS) {
+                user.usage.dataTransferred = 0;
+                user.usage.resetDate = now;
+                await user.save();
+            }
+
+            const userPlan = plansConfig[user.plan];
+            if (!userPlan) return false; // Invalid plan
+            if (userPlan.limits.maxDataTransfer === -1) return true; // Unlimited
+
+            const limitInBytes = userPlan.limits.maxDataTransfer * 1024 * 1024 * 1024;
+            
+            return (user.usage.dataTransferred + dataAmount) <= limitInBytes;
+        } catch (err) {
+            console.error(`[UsageTracker] Error in canTransfer for user ${userId}:`, err.message);
+            return false;
+        }
     }
-  }
+
+    /**
+     * Tracks data usage for a given tunnel and user.
+     * @param {object} tunnel - The tunnel object from the database.
+     * @param {number} dataAmount - The amount of data in bytes that was transferred.
+     */
+    async trackData(tunnel, dataAmount) {
+        if (!tunnel || !tunnel.userId || dataAmount <= 0) return;
+
+        try {
+            // Update total usage on the User model
+            await User.findByIdAndUpdate(tunnel.userId, {
+                $inc: { 'usage.dataTransferred': dataAmount }
+            });
+
+            // Optionally, create a detailed usage record
+            await Usage.create({
+                userId: tunnel.userId,
+                tunnelId: tunnel._id,
+                dataTransferred: dataAmount
+            });
+        } catch (err) {
+            console.error(`Error tracking usage for tunnel ${tunnel._id}:`, err.message);
+        }
+    }
 }
 
 module.exports = new UsageTracker();
