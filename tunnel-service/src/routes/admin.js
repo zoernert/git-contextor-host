@@ -57,6 +57,10 @@ router.put('/users/:id', [auth, admin], async (req, res) => {
         res.json(updatedUser);
     } catch (err) {
         console.error(err.message);
+        // Check if it's a validation error
+        if (err.name === 'ValidationError') {
+            return res.status(400).json({ msg: 'Invalid input data' });
+        }
         res.status(500).send('Server Error');
     }
 });
@@ -66,14 +70,27 @@ router.get('/analytics', [auth, admin], async (req, res) => {
     try {
         const userCount = await User.countDocuments();
         const activeTunnels = await Tunnel.countDocuments({ isActive: true });
+        const totalTunnels = await Tunnel.countDocuments();
         const activeSubscriptions = await User.countDocuments({ plan: { $ne: 'free' } });
         const monthlyRevenue = await StripeService.calculateMRR();
+
+        // Get plan distribution
+        const planDistribution = await User.aggregate([
+            { $group: { _id: '$plan', count: { $sum: 1 } } },
+            { $project: { plan: '$_id', count: 1, _id: 0 } }
+        ]);
+
+        const plans = {};
+        planDistribution.forEach(item => {
+            plans[item.plan] = item.count;
+        });
 
         res.json({
             users: userCount,
             subscriptions: { active: activeSubscriptions, churn: 0 },
-            tunnels: { active: activeTunnels },
-            revenue: { monthly: monthlyRevenue }
+            tunnels: { active: activeTunnels, total: totalTunnels },
+            revenue: { monthly: monthlyRevenue },
+            plans: plans
         });
     } catch (err) {
         console.error('Error fetching analytics:', err.message);
