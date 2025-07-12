@@ -33,6 +33,7 @@ app.use('/tunnel/:tunnelPath(*)', async (req, res, next) => {
     
     try {
         const tunnel = await Tunnel.findOne({ tunnelPath, isActive: true });
+        if (!tunnel) {
             return res.status(404).json({ 
                 error: 'Tunnel not found',
                 message: `Tunnel '${tunnelPath}' not found or is not active.`
@@ -70,6 +71,7 @@ app.use(async (req, res, next) => {
         
         try {
             const tunnel = await Tunnel.findOne({ subdomain, isActive: true });
+            if (!tunnel) {
                 return res.status(404).json({ msg: `Legacy tunnel for ${host} not found or is not active.` });
             }
 

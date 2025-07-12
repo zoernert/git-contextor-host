@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const Tunnel = require('../models/Tunnel');
-const { generateTunnelPath } = require('../utils/tunnelPath');
+const { generateTunnelPath, generateSubdomain } = require('../utils/tunnelPath');
 const { v4: uuidv4 } = require('uuid');
 const NginxManager = require('./NginxManager');
 const UsageTracker = require('./UsageTracker');
@@ -23,16 +23,27 @@ class TunnelManager {
         throw new Error('User not found');
     }
 
-    // 2. Generate unique tunnelPath
+    // 2. Generate unique tunnelPath and subdomain (for backward compatibility)
     const tunnelPath = await generateTunnelPath(options.requestedPath);
+    const subdomain = await generateSubdomain(options.requestedSubdomain);
 
-    // 3. Create Nginx proxy configuration
     // 3. Skip Nginx proxy configuration for path-based tunnels
-    // const proxyConfig = await nginxManager.createProxyHost(tunnelPath);
     const proxyConfig = { id: null, scheme: "https" };
+
+    // 4. Generate connection ID
+    const connectionId = uuidv4();
+
+    // 5. Create tunnel in database
+    const tunnel = new Tunnel({
+        userId,
+        subdomain, // Keep for backward compatibility
+        tunnelPath, // New path-based identifier
+        localPort,
+        connectionId,
+        proxyHostId: proxyConfig.id,
         metadata: options.metadata || {},
         expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 hours expiry
-        targetHost: 'localhost', // The client will connect to this service, so target is here.
+        targetHost: 'localhost',
         protocol: proxyConfig.scheme
     });
 

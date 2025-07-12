@@ -37,6 +37,7 @@ async function generateTunnelPath(requestedPath) {
     let attempts = 0;
     while (attempts < 5) {
         const existing = await Tunnel.findOne({ tunnelPath });
+        if (!existing) {
             break;
         }
         tunnelPath = nanoid(12);
@@ -57,9 +58,56 @@ async function generateTunnelPath(requestedPath) {
  */
 function isValidTunnelPath(path) {
     // Path should be 3-50 characters, alphanumeric and hyphens only
+    return /^[a-z0-9-]{3,50}$/.test(path) && !path.startsWith('-') && !path.endsWith('-');
+}
+
+/**
+ * Generate legacy subdomain for backward compatibility
+ * @param {string} requestedSubdomain - Optional requested subdomain
+ * @returns {Promise<string>} - Unique subdomain
+ */
+async function generateSubdomain(requestedSubdomain) {
+    let subdomain;
+    
+    if (requestedSubdomain) {
+        // Sanitize requested subdomain
+        subdomain = requestedSubdomain
+            .toLowerCase()
+            .replace(/[^a-z0-9-]/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-|-$/g, '');
+        
+        // Check if it's available
+        const existingTunnel = await Tunnel.findOne({ subdomain });
+        if (existingTunnel) {
+            // Append random suffix if taken
+            subdomain = `${subdomain}-${nanoid(6)}`;
+        }
+    } else {
+        // Generate random subdomain
+        subdomain = `sub-${nanoid(8)}`;
+    }
+    
+    // Ensure uniqueness
+    let attempts = 0;
+    while (attempts < 10) {
+        const existingTunnel = await Tunnel.findOne({ subdomain });
+        if (!existingTunnel) {
+            break;
+        }
+        subdomain = `sub-${nanoid(8)}`;
+        attempts++;
+    }
+    
+    if (attempts >= 10) {
+        throw new Error('Unable to generate unique subdomain after 10 attempts');
+    }
+    
+    return subdomain;
 }
 
 module.exports = {
     generateTunnelPath,
+    generateSubdomain,
     isValidTunnelPath
 };
