@@ -11,10 +11,14 @@ const TunnelSchema = new mongoose.Schema({
   customDomain: { type: String, default: null },
   connectionId: { type: String, required: true },
   proxyHostId: { type: Number }, // from Nginx Proxy Manager
+  description: { type: String, default: '' },
   metadata: {
     userAgent: String,
     clientIp: String,
-    gitContextorShare: { type: Boolean, default: false }
+    gitContextorShare: { type: Boolean, default: false },
+    type: { type: String, enum: ['http', 'qdrant'], default: 'http' },
+    collectionId: { type: mongoose.Schema.Types.ObjectId, ref: 'QdrantCollection' },
+    collectionName: String
   },
   createdAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, required: true }
@@ -33,5 +37,17 @@ TunnelSchema.virtual('url').get(function() {
 TunnelSchema.virtual('subdomainUrl').get(function() {
     return `${this.protocol}://${this.subdomain}.${process.env.TUNNEL_DOMAIN || 'localhost.test'}`;
 });
+
+// Qdrant URL virtual
+TunnelSchema.virtual('qdrantUrl').get(function() {
+    const baseUrl = process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud';
+    return `${baseUrl}/qdrant/${this.tunnelPath}`;
+});
+
+// Add indexes for efficient queries
+TunnelSchema.index({ userId: 1, isActive: 1 });
+TunnelSchema.index({ 'metadata.type': 1 });
+TunnelSchema.index({ 'metadata.collectionId': 1 });
+TunnelSchema.index({ expiresAt: 1 });
 
 module.exports = mongoose.model('Tunnel', TunnelSchema);

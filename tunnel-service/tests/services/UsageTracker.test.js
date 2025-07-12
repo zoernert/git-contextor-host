@@ -1,3 +1,5 @@
+const mongoose = require('mongoose');
+const connectDB = require('../../src/config/database');
 const UsageTracker = require('../../src/services/UsageTracker');
 const Usage = require('../../src/models/Usage');
 const User = require('../../src/models/User');
@@ -6,6 +8,10 @@ const plansConfig = require('../../src/config/plans');
 describe('UsageTracker', () => {
     let user;
     let tunnel;
+
+    beforeAll(async () => {
+        await connectDB();
+    });
 
     beforeEach(async () => {
         // Clear database
@@ -23,7 +29,7 @@ describe('UsageTracker', () => {
 
         // Mock tunnel object
         tunnel = {
-            _id: 'tunnel-id-123',
+            _id: new mongoose.Types.ObjectId(),
             userId: user._id
         };
     });
@@ -88,10 +94,9 @@ describe('UsageTracker', () => {
             const limitInBytes = freePlan.limits.maxDataTransfer * 1024 * 1024 * 1024; // Convert GB to bytes
             const currentUsage = limitInBytes - 1024; // 1KB under limit
             
-            await Usage.create({
-                tunnelId: tunnel._id,
-                userId: user._id,
-                dataTransferred: currentUsage
+            // Update the user's usage directly (this is what canTransfer checks)
+            await User.findByIdAndUpdate(user._id, {
+                'usage.dataTransferred': currentUsage
             });
             
             const transferAmount = 2048; // 2KB (would exceed limit)
@@ -136,7 +141,7 @@ describe('UsageTracker', () => {
             await Usage.create([
                 { tunnelId: tunnel._id, userId: user._id, dataTransferred: 1024 },
                 { tunnelId: tunnel._id, userId: user._id, dataTransferred: 2048 },
-                { tunnelId: 'other-tunnel', userId: user._id, dataTransferred: 512 }
+                { tunnelId: new mongoose.Types.ObjectId(), userId: user._id, dataTransferred: 512 }
             ]);
 
             const usage = await UsageTracker.getCurrentUsage(user._id);
@@ -163,7 +168,7 @@ describe('UsageTracker', () => {
             // Create some usage records
             await Usage.create([
                 { tunnelId: tunnel._id, userId: user._id, dataTransferred: 1024 },
-                { tunnelId: 'other-tunnel', userId: user._id, dataTransferred: 2048 }
+                { tunnelId: new mongoose.Types.ObjectId(), userId: user._id, dataTransferred: 2048 }
             ]);
         });
 
@@ -185,7 +190,7 @@ describe('UsageTracker', () => {
             });
 
             await Usage.create({
-                tunnelId: 'other-user-tunnel',
+                tunnelId: new mongoose.Types.ObjectId(),
                 userId: otherUser._id,
                 dataTransferred: 4096
             });

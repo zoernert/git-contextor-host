@@ -13,16 +13,16 @@ afterEach(async () => {
 
 // Global cleanup
 afterAll(async () => {
-  // Close mongoose connection
-  if (mongoose.connection.readyState === 1) {
-    await mongoose.connection.close();
-  }
-  
   // Close any remaining timers
   jest.clearAllTimers();
   
   // Force garbage collection if available
   if (global.gc) {
     global.gc();
+  }
+  
+  // Close mongoose connection - but only if not already closed
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.connection.close();
   }
 });

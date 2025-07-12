@@ -172,6 +172,7 @@ describe('Admin API', () => {
                 {
                     userId: regularUser._id,
                     subdomain: 'test-tunnel-1',
+                    tunnelPath: 'test-path-1',
                     localPort: 3000,
                     connectionId: 'conn-1',
                     isActive: true,
@@ -180,6 +181,7 @@ describe('Admin API', () => {
                 {
                     userId: regularUser._id,
                     subdomain: 'test-tunnel-2',
+                    tunnelPath: 'test-path-2',
                     localPort: 3001,
                     connectionId: 'conn-2',
                     isActive: false,
@@ -232,6 +234,7 @@ describe('Admin API', () => {
                 {
                     userId: regularUser._id,
                     subdomain: 'analytics-tunnel-1',
+                    tunnelPath: 'analytics-path-1',
                     localPort: 3000,
                     connectionId: 'analytics-conn-1',
                     isActive: true,
@@ -240,6 +243,7 @@ describe('Admin API', () => {
                 {
                     userId: regularUser._id,
                     subdomain: 'analytics-tunnel-2',
+                    tunnelPath: 'analytics-path-2',
                     localPort: 3001,
                     connectionId: 'analytics-conn-2',
                     isActive: true,

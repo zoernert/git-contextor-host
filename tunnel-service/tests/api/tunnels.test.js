@@ -4,9 +4,7 @@ const User = require('../../src/models/User');
 const Tunnel = require('../../src/models/Tunnel');
 const Usage = require('../../src/models/Usage');
 const stripe = require('../../src/config/stripe');
-const NginxManager = require('../../src/services/NginxManager');
 
-jest.mock('../../src/services/NginxManager');
 jest.mock('../../src/config/stripe');
 
 describe('Tunnels API', () => {
@@ -23,8 +21,6 @@ describe('Tunnels API', () => {
 
         // Mock external services
         stripe.customers.create.mockResolvedValue({ id: 'cus_mock_tunnel_user' });
-        NginxManager.mock.instances[0].createProxyHost.mockResolvedValue({ id: 123, scheme: 'https' });
-        NginxManager.mock.instances[0].deleteProxyHost.mockResolvedValue({ message: 'Proxy host deleted' });
 
         // Create a fresh user and token for each test
         const userRes = await request(app)
@@ -47,8 +43,11 @@ describe('Tunnels API', () => {
         
         expect(res.statusCode).toEqual(201);
         expect(res.body).toHaveProperty('subdomain');
+        expect(res.body).toHaveProperty('tunnelPath');
+        expect(res.body).toHaveProperty('connectionId');
         expect(res.body.userId).toBe(userId);
-        expect(NginxManager.mock.instances[0].createProxyHost).toHaveBeenCalledTimes(1);
+        expect(res.body.localPort).toBe(3000);
+        expect(res.body.isActive).toBe(true);
     });
 
     it('should not create a tunnel if port is not provided', async () => {
@@ -65,7 +64,8 @@ describe('Tunnels API', () => {
 
         const deleteRes = await request(app).delete(`/api/tunnels/${tunnelId}`).set('x-auth-token', token);
         expect(deleteRes.statusCode).toEqual(200);
-        expect(NginxManager.mock.instances[0].deleteProxyHost).toHaveBeenCalledWith(123);
+        expect(deleteRes.body.msg).toContain('Tunnel destroyed');
+        
         const tunnelInDb = await Tunnel.findById(tunnelId);
         expect(tunnelInDb.isActive).toBe(false);
     });

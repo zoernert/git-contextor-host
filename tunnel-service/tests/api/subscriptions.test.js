@@ -45,16 +45,22 @@ describe('Subscriptions API', () => {
                 .set('x-auth-token', token);
 
             expect(res.statusCode).toBe(200);
-            expect(res.body).toHaveProperty('free');
-            expect(res.body).toHaveProperty('basic');
-            expect(res.body).toHaveProperty('pro');
-            expect(res.body).toHaveProperty('enterprise');
+            expect(Array.isArray(res.body)).toBe(true);
+            expect(res.body.length).toBe(4); // free, basic, pro, enterprise
+            
+            // Check that all plan IDs exist
+            const planIds = res.body.map(plan => plan.id);
+            expect(planIds).toContain('free');
+            expect(planIds).toContain('basic');
+            expect(planIds).toContain('pro');
+            expect(planIds).toContain('enterprise');
             
             // Check plan structure
-            expect(res.body.basic).toHaveProperty('name');
-            expect(res.body.basic).toHaveProperty('price');
-            expect(res.body.basic).toHaveProperty('limits');
-            expect(res.body.basic).toHaveProperty('features');
+            const basicPlan = res.body.find(plan => plan.id === 'basic');
+            expect(basicPlan).toHaveProperty('name');
+            expect(basicPlan).toHaveProperty('price');
+            expect(basicPlan).toHaveProperty('limits');
+            expect(basicPlan).toHaveProperty('features');
         });
 
         it('should work without authentication', async () => {
