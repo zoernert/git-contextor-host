@@ -5,7 +5,13 @@ module.exports = async function (req, res, next) {
         // req.user.id is set from auth middleware
         const user = await User.findById(req.user.id);
 
-        if (user && user.role === 'admin') {
+        // Check if user has admin role OR if their email matches ADMIN_EMAIL
+        const isAdmin = user && (
+            user.role === 'admin' || 
+            (process.env.ADMIN_EMAIL && user.email === process.env.ADMIN_EMAIL)
+        );
+
+        if (isAdmin) {
             next();
         } else {
             res.status(403).json({ msg: 'Access denied. Admin role required.' });

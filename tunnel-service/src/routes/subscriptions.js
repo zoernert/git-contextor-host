@@ -12,17 +12,14 @@ const { body, validationResult } = require('express-validator');
 // @desc    Get available subscription plans
 // @access  Public
 router.get('/plans', (req, res) => {
-    // Return plans as an object with plan keys
-    const formattedPlans = {};
-    Object.keys(plansConfig).forEach(key => {
-        formattedPlans[key] = {
-            id: key,
-            name: plansConfig[key].name,
-            price: plansConfig[key].price,
-            features: plansConfig[key].features,
-            limits: plansConfig[key].limits
-        };
-    });
+    // Return plans as an array for frontend mapping
+    const formattedPlans = Object.keys(plansConfig).map(key => ({
+        id: key,
+        name: plansConfig[key].name,
+        price: plansConfig[key].price,
+        features: plansConfig[key].features,
+        limits: plansConfig[key].limits
+    }));
     res.json(formattedPlans);
 });
 
