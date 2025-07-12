@@ -59,13 +59,14 @@ Creates a tunnel and keeps it running for manual testing. Press Ctrl+C to stop a
 - Automatically cleaned up after tests
 
 ### 4. **Tunnel Creation**
-- Creates a tunnel with random subdomain (e.g., `test-1720812345`)
+- Creates a tunnel with path-based URL (e.g., `https://tunnel.corrently.cloud/tunnel/abc123`)
 - Uses API to register the tunnel
+- Starts WebSocket tunnel client to handle traffic
 - Extracts tunnel URL for testing
 
 ### 5. **Connectivity Testing**
-- Tests if requests to `https://test-xxx.tunnel.corrently.cloud` 
-- Forwards correctly to local server on port 8888
+- Tests if requests to `https://tunnel.corrently.cloud/tunnel/xxx` 
+- Forwards correctly to local server on port 8888 via WebSocket tunnel client
 - Retries up to 10 times with delays
 
 ### 6. **Load Testing**
