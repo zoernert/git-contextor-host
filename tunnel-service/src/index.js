@@ -1,5 +1,6 @@
 const express = require('express');
 const http = require('http');
+const path = require('path');
 const { WebSocketServer } = require('ws');
 const dotenv = require('dotenv');
 const helmet = require('helmet');
@@ -79,6 +80,27 @@ app.use('/api/tunnels', require('./routes/tunnels'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/qdrant', require('./routes/qdrant'));
+
+// Serve static files from admin-ui/dist
+app.use(express.static(path.join(__dirname, '../admin-ui/dist')));
+
+// Handle React Router - serve index.html for non-API routes
+app.get('*', (req, res, next) => {
+  // Skip API routes and tunnel subdomains
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  
+  // Skip tunnel subdomain requests
+  const host = req.get('host');
+  const tunnelDomain = process.env.TUNNEL_DOMAIN;
+  if (host && tunnelDomain && host.endsWith(`.${tunnelDomain}`)) {
+    return next();
+  }
+  
+  // Serve index.html for all other routes (React Router)
+  res.sendFile(path.join(__dirname, '../admin-ui/dist/index.html'));
+});
 
 const PORT = process.env.PORT || 5000;
 

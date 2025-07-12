@@ -29,8 +29,14 @@ git clone https://github.com/your-repo/git-contextor-host.git
 
 ### Basic Operations
 ```bash
-# Deploy latest code
+# Full deployment with frontend build
 ./deploy.sh
+
+# Build frontend only (local)
+./deploy.sh build
+
+# Upload built frontend to server
+./deploy.sh upload
 
 # Check service status
 ./deploy.sh status

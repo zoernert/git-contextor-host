@@ -44,6 +44,53 @@ error() {
     exit 1
 }
 
+# Check if local Node.js and npm are available for building
+check_local_dependencies() {
+    log "Checking local build dependencies..."
+    
+    if ! command -v node &> /dev/null; then
+        error "Node.js is not installed locally. Please install Node.js to build the frontend."
+    fi
+    
+    if ! command -v npm &> /dev/null; then
+        error "npm is not installed locally. Please install npm to build the frontend."
+    fi
+    
+    success "Local build dependencies available"
+}
+
+# Build frontend locally
+build_frontend() {
+    log "Building frontend application..."
+    
+    # Check if admin-ui directory exists
+    if [ ! -d "tunnel-service/admin-ui" ]; then
+        error "Frontend directory 'tunnel-service/admin-ui' not found!"
+    fi
+    
+    # Navigate to frontend directory
+    cd tunnel-service/admin-ui
+    
+    # Install dependencies if node_modules doesn't exist
+    if [ ! -d "node_modules" ]; then
+        log "Installing frontend dependencies..."
+        npm install
+    fi
+    
+    # Build the frontend
+    log "Building React application..."
+    npm run build
+    
+    # Verify build was successful
+    if [ ! -d "dist" ]; then
+        error "Frontend build failed - dist directory not created!"
+    fi
+    
+    # Return to original directory
+    cd ../..
+    success "Frontend build completed"
+}
+
 # Check if SSH connection is available
 check_ssh_connection() {
     log "Checking SSH connection to $SERVER_USER@$SERVER_HOST..."
@@ -95,7 +142,7 @@ pull_latest_code() {
     success "Latest code pulled"
 }
 
-# Install dependencies
+# Install dependencies and build frontend
 install_dependencies() {
     log "Installing Node.js dependencies..."
     
@@ -105,6 +152,59 @@ install_dependencies() {
     "
     
     success "Dependencies installed"
+}
+
+# Upload built frontend to server
+upload_frontend() {
+    log "Uploading built frontend to server..."
+    
+    # Upload the built dist directory
+    scp -r tunnel-service/admin-ui/dist "$SERVER_USER@$SERVER_HOST:$SERVICE_PATH/admin-ui/"
+    
+    success "Frontend uploaded to server"
+}
+
+# Configure backend to serve static files
+configure_static_serving() {
+    log "Configuring backend to serve static files..."
+    
+    ssh "$SERVER_USER@$SERVER_HOST" "
+        cd '$SERVICE_PATH'
+        
+        # Check if static file serving is already configured
+        if ! grep -q 'express.static' src/index.js; then
+            # Create backup of index.js
+            cp src/index.js src/index.js.backup
+            
+            # Add path require if not present
+            if ! grep -q \"const path = require('path')\" src/index.js; then
+                sed -i '1a const path = require(\"path\");' src/index.js
+            fi
+            
+            # Add static serving configuration before app.listen
+            sed -i '/app\.listen/i\\
+// Serve static files from admin-ui/dist\
+app.use(express.static(path.join(__dirname, \"../admin-ui/dist\")));\
+\
+// Handle React Router - serve index.html for non-API routes\
+app.get(\"*\", (req, res, next) => {\
+  // Skip API routes\
+  if (req.path.startsWith(\"/api/\")) {\
+    return next();\
+  }\
+  \
+  // Serve index.html for all other routes\
+  res.sendFile(path.join(__dirname, \"../admin-ui/dist/index.html\"));\
+});\
+' src/index.js
+            
+            echo 'Static file serving configured'
+        else
+            echo 'Static file serving already configured'
+        fi
+    "
+    
+    success "Static file serving configured"
 }
 
 # Setup environment configuration
@@ -227,11 +327,19 @@ health_check() {
             exit 1
         fi
         
-        # Check if service responds
+        # Check if API responds
         if curl -f http://localhost:5000/api/health > /dev/null 2>&1; then
-            echo 'Health check passed'
+            echo 'API health check passed'
         else
-            echo 'Health check failed - service not responding'
+            echo 'API health check failed - service not responding'
+            exit 1
+        fi
+        
+        # Check if frontend is served
+        if curl -f http://localhost:5000/ > /dev/null 2>&1; then
+            echo 'Frontend serving check passed'
+        else
+            echo 'Frontend serving check failed'
             exit 1
         fi
     "
@@ -282,20 +390,26 @@ deploy() {
     echo "
     ╔═══════════════════════════════════════════════════════════════╗
     ║                Git Contextor Host Deployment                  ║
-    ║                      Production Server                        ║
+    ║                  Full-Stack Production Server                 ║
     ╚═══════════════════════════════════════════════════════════════╝
     "
     
-    log "Starting deployment to $SERVER_HOST..."
+    log "Starting full-stack deployment to $SERVER_HOST..."
     
     # Pre-deployment checks
+    check_local_dependencies
     check_ssh_connection
     check_remote_repository
+    
+    # Build frontend locally
+    build_frontend
     
     # Deployment steps
     create_backup
     pull_latest_code
     install_dependencies
+    upload_frontend
+    configure_static_serving
     setup_environment
     create_pm2_config
     setup_logging
@@ -309,21 +423,22 @@ deploy() {
     # Post-deployment
     show_status
     
-    success "Deployment completed successfully!"
+    success "Full-stack deployment completed successfully!"
     
     echo "
     ╔═══════════════════════════════════════════════════════════════╗
     ║                    Deployment Summary                         ║
     ╠═══════════════════════════════════════════════════════════════╣
     ║ Server: $SERVER_HOST                                   ║
-    ║ Service: Running on port 5000                                 ║
+    ║ Frontend: Available at http://$SERVER_HOST:5000        ║
+    ║ API: Available at http://$SERVER_HOST:5000/api         ║
     ║ Process Manager: PM2                                          ║
     ║ Health Check: ✅ Passed                                       ║
     ║                                                               ║
     ║ Next Steps:                                                   ║
     ║ 1. Update .env with production values                         ║
     ║ 2. Configure domain and SSL certificates                      ║
-    ║ 3. Set up monitoring and alerts                               ║
+    ║ 3. Access the application at http://$SERVER_HOST:5000  ║
     ╚═══════════════════════════════════════════════════════════════╝
     "
 }
@@ -369,6 +484,18 @@ case "${1:-deploy}" in
     deploy)
         deploy
         ;;
+    build)
+        log "Building frontend only..."
+        check_local_dependencies
+        build_frontend
+        success "Frontend build completed"
+        ;;
+    upload)
+        log "Uploading frontend only..."
+        check_ssh_connection
+        upload_frontend
+        success "Frontend upload completed"
+        ;;
     rollback)
         rollback
         ;;
@@ -385,10 +512,12 @@ case "${1:-deploy}" in
         health_check
         ;;
     *)
-        echo "Usage: $0 {deploy|rollback|status|logs|restart|health}"
+        echo "Usage: $0 {deploy|build|upload|rollback|status|logs|restart|health}"
         echo ""
         echo "Commands:"
-        echo "  deploy   - Deploy the latest code to production"
+        echo "  deploy   - Full deployment with frontend build"
+        echo "  build    - Build frontend only (local)"
+        echo "  upload   - Upload built frontend to server"
         echo "  rollback - Rollback to previous deployment"
         echo "  status   - Show service status"
         echo "  logs     - Show service logs"
