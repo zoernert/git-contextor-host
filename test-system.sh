@@ -14,7 +14,7 @@ set -e
 PROD_SERVER="tunnel.corrently.cloud"
 API_KEY="b6403676-186a-4d2b-8983-545b27e6c99e"
 BASE_URL="https://${PROD_SERVER}"
-TEST_PORT=8888
+TEST_PORT=8889
 TEST_PATH="test-$(date +%s)"
 LOCAL_TEST_SERVER_PID=""
 TUNNEL_CLIENT_PID=""
@@ -47,16 +47,30 @@ error() {
 cleanup() {
     log "Cleaning up test resources..."
     
-    # Stop local test server
-    if [ -n "$LOCAL_TEST_SERVER_PID" ]; then
-        kill $LOCAL_TEST_SERVER_PID 2>/dev/null || true
-        success "Local test server stopped"
+    # Stop tunnel client first
+    if [ -n "$TUNNEL_CLIENT_PID" ]; then
+        if kill -0 $TUNNEL_CLIENT_PID 2>/dev/null; then
+            kill $TUNNEL_CLIENT_PID 2>/dev/null || true
+            sleep 2
+            # Force kill if still running
+            if kill -0 $TUNNEL_CLIENT_PID 2>/dev/null; then
+                kill -9 $TUNNEL_CLIENT_PID 2>/dev/null || true
+            fi
+        fi
+        success "Tunnel client stopped"
     fi
     
-    # Stop tunnel client
-    if [ -n "$TUNNEL_CLIENT_PID" ]; then
-        kill $TUNNEL_CLIENT_PID 2>/dev/null || true
-        success "Tunnel client stopped"
+    # Stop local test server
+    if [ -n "$LOCAL_TEST_SERVER_PID" ]; then
+        if kill -0 $LOCAL_TEST_SERVER_PID 2>/dev/null; then
+            kill $LOCAL_TEST_SERVER_PID 2>/dev/null || true
+            sleep 2
+            # Force kill if still running
+            if kill -0 $LOCAL_TEST_SERVER_PID 2>/dev/null; then
+                kill -9 $LOCAL_TEST_SERVER_PID 2>/dev/null || true
+            fi
+        fi
+        success "Local test server stopped"
     fi
     
     # Delete test tunnel
@@ -120,43 +134,105 @@ test_auth() {
 start_local_server() {
     log "Starting local test server on port $TEST_PORT..."
     
+    # Kill any existing process on the test port
+    local existing_pid=$(lsof -ti :$TEST_PORT 2>/dev/null || true)
+    if [ -n "$existing_pid" ]; then
+        warning "Port $TEST_PORT already in use by PID $existing_pid, killing it..."
+        kill -9 $existing_pid 2>/dev/null || true
+        sleep 2
+    fi
+    
     # Create a simple test server
     cat > /tmp/test_server.js << 'INNER_EOF'
 const http = require('http');
 const server = http.createServer((req, res) => {
+    console.log(`[TestServer] ${req.method} ${req.url} from ${req.socket.remoteAddress}`);
     res.writeHead(200, {'Content-Type': 'application/json'});
     res.end(JSON.stringify({
         message: 'Hello from local test server!',
         timestamp: new Date().toISOString(),
         path: req.url,
         method: req.method,
-        headers: req.headers
+        headers: req.headers,
+        remoteAddress: req.socket.remoteAddress
     }));
 });
 
 const PORT = process.env.TEST_PORT || 8888;
-server.listen(PORT, 'localhost', () => {
-    console.log(`Test server running on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Test server running on http://0.0.0.0:${PORT}`);
+    console.log(`Accessible via http://localhost:${PORT} and http://127.0.0.1:${PORT}`);
+});
+
+// Handle server errors
+server.on('error', (err) => {
+    console.error('Server error:', err);
 });
 INNER_EOF
     
-    # Start the test server
-    TEST_PORT=$TEST_PORT node /tmp/test_server.js &
+    # Start the test server with logging
+    TEST_PORT=$TEST_PORT node /tmp/test_server.js > /tmp/test_server.log 2>&1 &
     LOCAL_TEST_SERVER_PID=$!
+    
+    log "Test server started with PID: $LOCAL_TEST_SERVER_PID"
     
     # Wait for server to start
     sleep 3
     
-    # Test local server
-    local response=$(curl -s -w "%{http_code}" "http://localhost:$TEST_PORT" -o /tmp/local_test.json)
-    
-    if [ "$response" = "200" ]; then
-        success "Local test server started successfully"
-        cat /tmp/local_test.json | jq . 2>/dev/null || cat /tmp/local_test.json
-    else
-        error "Local test server failed to start"
+    # Check if process is still running
+    if ! kill -0 $LOCAL_TEST_SERVER_PID 2>/dev/null; then
+        error "Test server process died immediately"
+        error "Test server logs:"
+        cat /tmp/test_server.log
         return 1
     fi
+    
+    # Test local server
+    local max_attempts=10
+    local attempt=1
+    
+    while [ $attempt -le $max_attempts ]; do
+        # Check if process is still running
+        if ! kill -0 $LOCAL_TEST_SERVER_PID 2>/dev/null; then
+            error "Test server process died during startup"
+            error "Test server logs:"
+            cat /tmp/test_server.log
+            return 1
+        fi
+        
+        log "Testing local server (attempt $attempt/$max_attempts)..."
+        local response=$(curl -s -w "%{http_code}" "http://localhost:$TEST_PORT" -o /tmp/local_test.json 2>/dev/null)
+        
+        if [ "$response" = "200" ]; then
+            success "Local test server started successfully"
+            cat /tmp/local_test.json | jq . 2>/dev/null || cat /tmp/local_test.json
+            
+            # Test that server is also accessible via 127.0.0.1
+            local response_127=$(curl -s -w "%{http_code}" "http://127.0.0.1:$TEST_PORT" -o /tmp/local_test_127.json 2>/dev/null)
+            if [ "$response_127" = "200" ]; then
+                success "Local test server accessible via 127.0.0.1"
+            else
+                warning "Local test server not accessible via 127.0.0.1 (HTTP $response_127)"
+            fi
+            
+            # Show server logs
+            log "Test server logs:"
+            cat /tmp/test_server.log
+            
+            return 0
+        else
+            warning "Local test server not ready yet (attempt $attempt/$max_attempts) - HTTP $response"
+            if [ $attempt -eq $max_attempts ]; then
+                error "Local test server failed to start after $max_attempts attempts"
+                error "Test server logs:"
+                cat /tmp/test_server.log
+                return 1
+            fi
+            sleep 2
+        fi
+        
+        ((attempt++))
+    done
 }
 
 # Test 4: Create Tunnel
@@ -221,12 +297,12 @@ start_tunnel_client() {
         return 1
     fi
     
-    # Start tunnel client
+    # Start tunnel client with more verbose logging
     node tunnel-client.js "$BASE_URL" "$CONNECTION_ID" "$TEST_PORT" > /tmp/tunnel_client.log 2>&1 &
     TUNNEL_CLIENT_PID=$!
     
     # Wait for tunnel client to connect
-    sleep 5
+    sleep 8
     
     # Check if tunnel client is running
     if kill -0 $TUNNEL_CLIENT_PID 2>/dev/null; then
@@ -234,9 +310,14 @@ start_tunnel_client() {
         log "Tunnel client PID: $TUNNEL_CLIENT_PID"
         
         # Show recent logs
-        tail -n 5 /tmp/tunnel_client.log
+        log "Tunnel client logs:"
+        tail -n 10 /tmp/tunnel_client.log
+        
+        # Wait a bit more for WebSocket connection to establish
+        sleep 5
     else
         error "Tunnel client failed to start"
+        error "Tunnel client logs:"
         cat /tmp/tunnel_client.log
         return 1
     fi
@@ -246,9 +327,38 @@ start_tunnel_client() {
 test_tunnel_connectivity() {
     log "Testing tunnel connectivity..."
     
+    # First, verify the local server is still running
+    if ! kill -0 $LOCAL_TEST_SERVER_PID 2>/dev/null; then
+        error "Local test server process died! Restarting..."
+        start_local_server
+    else
+        success "Local test server is still running (PID: $LOCAL_TEST_SERVER_PID)"
+        
+        # Test local server connectivity via localhost
+        local response=$(curl -s -w "%{http_code}" "http://localhost:$TEST_PORT" -o /tmp/local_verify.json 2>/dev/null)
+        if [ "$response" = "200" ]; then
+            success "Local server is responding correctly via localhost"
+        else
+            error "Local server not responding via localhost! Response: $response"
+            error "Local server logs:"
+            cat /tmp/test_server.log
+            return 1
+        fi
+        
+        # Test local server connectivity via 127.0.0.1
+        local response_127=$(curl -s -w "%{http_code}" "http://127.0.0.1:$TEST_PORT" -o /tmp/local_verify_127.json 2>/dev/null)
+        if [ "$response_127" = "200" ]; then
+            success "Local server is responding correctly via 127.0.0.1"
+        else
+            error "Local server not responding via 127.0.0.1! Response: $response_127"
+            error "This is likely why the tunnel client can't connect"
+            return 1
+        fi
+    fi
+    
     # Wait for tunnel to be ready
     log "Waiting for tunnel to be active..."
-    sleep 10
+    sleep 15
     
     # Test tunnel connection
     local max_attempts=10
@@ -259,6 +369,9 @@ test_tunnel_connectivity() {
         
         local response=$(curl -s -w "%{http_code}" \
             -H "User-Agent: E2E-Test-Script" \
+            -H "Accept: application/json" \
+            --connect-timeout 10 \
+            --max-time 30 \
             "$TUNNEL_URL" -o /tmp/tunnel_test.json 2>/dev/null)
         
         if [ "$response" = "200" ]; then
@@ -277,13 +390,26 @@ test_tunnel_connectivity() {
             
         else
             warning "Tunnel test failed - HTTP $response (attempt $attempt/$max_attempts)"
+            
+            # Show detailed error information
+            if [ -f /tmp/tunnel_test.json ]; then
+                log "Response content:"
+                cat /tmp/tunnel_test.json
+            fi
+            
+            # Show tunnel client logs if failing
+            if [ $attempt -eq 3 ]; then
+                log "Tunnel client logs (last 20 lines):"
+                tail -n 20 /tmp/tunnel_client.log
+            fi
+            
             if [ $attempt -eq $max_attempts ]; then
                 error "Tunnel connectivity test failed after $max_attempts attempts"
                 return 1
             fi
         fi
         
-        sleep 5
+        sleep 8
         ((attempt++))
     done
 }
@@ -319,9 +445,9 @@ test_list_tunnels() {
         success "Tunnel listing successful"
         
         # Check if our tunnel is in the list
-        local found=$(cat /tmp/tunnels_list.json | jq -r ".[] | select(.subdomain == \"$TEST_SUBDOMAIN\") | .subdomain" 2>/dev/null)
+        local found=$(cat /tmp/tunnels_list.json | jq -r ".[] | select(.tunnelPath == \"$TEST_PATH\") | .tunnelPath" 2>/dev/null)
         
-        if [ "$found" = "$TEST_SUBDOMAIN" ]; then
+        if [ "$found" = "$TEST_PATH" ]; then
             success "Test tunnel found in listing"
         else
             warning "Test tunnel not found in listing"
@@ -357,7 +483,7 @@ run_tests() {
     
     log "Starting end-to-end tunnel test..."
     log "Production Server: $PROD_SERVER"
-    log "Test Subdomain: $TEST_SUBDOMAIN"
+    log "Test Path: $TEST_PATH"
     log "Local Test Port: $TEST_PORT"
     
     # Run all tests
@@ -378,7 +504,7 @@ run_tests() {
     echo -e "${BLUE}║                        Test Summary                           ║${NC}"
     echo -e "${BLUE}╠═══════════════════════════════════════════════════════════════╣${NC}"
     echo -e "${BLUE}║ Production Server: $PROD_SERVER                        ║${NC}"
-    echo -e "${BLUE}║ Test Subdomain: $TEST_SUBDOMAIN                              ║${NC}"
+    echo -e "${BLUE}║ Test Path: $TEST_PATH                              ║${NC}"
     echo -e "${BLUE}║ Tunnel URL: $TUNNEL_URL           ║${NC}"
     echo -e "${BLUE}║ Local Server: http://localhost:$TEST_PORT                      ║${NC}"
     echo -e "${BLUE}║                                                               ║${NC}"

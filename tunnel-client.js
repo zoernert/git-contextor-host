@@ -68,12 +68,20 @@ class TunnelClient {
     handleHttpRequest(data) {
         const { requestId, method, url: reqUrl, headers, body } = data;
         
-        console.log(`[TunnelClient] Forwarding ${method} ${reqUrl} to localhost:${this.localPort}`);
+        // Strip tunnel path prefix from the URL
+        // URLs come in as /tunnel/tunnelPath/actual/path, we need to extract /actual/path
+        let localPath = reqUrl;
+        const tunnelMatch = reqUrl.match(/^\/tunnel\/[^\/]+(.*)$/);
+        if (tunnelMatch) {
+            localPath = tunnelMatch[1] || '/';
+        }
+        
+        console.log(`[TunnelClient] Forwarding ${method} ${reqUrl} -> ${localPath} to localhost:${this.localPort}`);
         
         const options = {
             hostname: 'localhost',
             port: this.localPort,
-            path: reqUrl,
+            path: localPath,
             method: method,
             headers: headers
         };
