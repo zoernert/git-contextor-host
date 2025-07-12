@@ -2,8 +2,7 @@ const mongoose = require('mongoose');
 
 const TunnelSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  subdomain: { type: String, required: true, unique: true }, // Keep for backward compatibility
-  tunnelPath: { type: String, required: true, unique: true }, // New path-based identifier
+  subdomain: { type: String, required: true, unique: true },
   localPort: { type: Number, required: true },
   targetHost: { type: String, default: 'localhost' },
   isActive: { type: Boolean, default: true },
@@ -23,14 +22,7 @@ const TunnelSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Path-based URL virtual
 TunnelSchema.virtual('url').get(function() {
-    const baseUrl = process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud';
-    return `${baseUrl}/tunnel/${this.tunnelPath}`;
-});
-
-// Legacy subdomain URL virtual (for backward compatibility)
-TunnelSchema.virtual('subdomainUrl').get(function() {
     return `${this.protocol}://${this.subdomain}.${process.env.TUNNEL_DOMAIN || 'localhost.test'}`;
 });
 

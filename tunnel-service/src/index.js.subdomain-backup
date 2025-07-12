@@ -27,61 +27,34 @@ wss.on('connection', (ws) => {
 const getRawBody = require('raw-body');
 const Tunnel = require('./models/Tunnel');
 
-// Path-based tunnel proxy middleware
-app.use('/tunnel/:tunnelPath(*)', async (req, res, next) => {
-    const tunnelPath = req.params.tunnelPath;
-    
-    try {
-        const tunnel = await Tunnel.findOne({ tunnelPath, isActive: true });
-            return res.status(404).json({ 
-                error: 'Tunnel not found',
-                message: `Tunnel '${tunnelPath}' not found or is not active.`
-            });
-        }
-
-        // Get raw body for proxying
-        req.body = await getRawBody(req);
-        
-        // Proxy the request to the tunnel client
-        TunnelManager.proxyRequest(tunnel.connectionId, req, res);
-
-    } catch (err) {
-        console.error('Tunnel proxy error:', err.message);
-        res.status(500).json({ 
-            error: 'Proxy Error',
-            message: 'Internal server error during tunnel proxying.'
-        });
-    }
-});
-
-// Legacy subdomain support (for backward compatibility)
 app.use(async (req, res, next) => {
-    // Skip API requests and tunnel paths
-    if (req.path.startsWith('/api/') || req.path.startsWith('/tunnel/') || req.path === '/') {
+    // API requests and the root path should not be proxied
+    if (req.path.startsWith('/api/') || req.path === '/') {
         return next();
     }
 
     const host = req.get('host');
     const tunnelDomain = process.env.TUNNEL_DOMAIN;
 
-    // Check if it's a request to a tunnel subdomain (legacy support)
-    if (host && tunnelDomain && host.endsWith(`.${tunnelDomain}`)) {
-        const subdomain = host.substring(0, host.length - tunnelDomain.length - 1);
-        
-        try {
-            const tunnel = await Tunnel.findOne({ subdomain, isActive: true });
-                return res.status(404).json({ msg: `Legacy tunnel for ${host} not found or is not active.` });
-            }
-
-            req.body = await getRawBody(req);
-            TunnelManager.proxyRequest(tunnel.connectionId, req, res);
-
-        } catch (err) {
-            console.error('Legacy tunnel proxy error:', err.message);
-            res.status(500).send('Internal Server Error during legacy tunnel proxying.');
+    // Check if it's a request to a tunnel subdomain
+    if (!host || !tunnelDomain || !host.endsWith(`.${tunnelDomain}`)) {
+        return next();
+    }
+    
+    const subdomain = host.substring(0, host.length - tunnelDomain.length - 1);
+    
+    try {
+        const tunnel = await Tunnel.findOne({ subdomain, isActive: true });
+        if (!tunnel) {
+            return res.status(404).json({ msg: `Tunnel for ${host} not found or is not active.` });
         }
-    } else {
-        next();
+
+        req.body = await getRawBody(req);
+        TunnelManager.proxyRequest(tunnel.connectionId, req, res);
+
+    } catch (err) {
+        console.error('Proxy error:', err.message);
+        res.status(500).send('Internal Server Error during proxying.');
     }
 });
 
@@ -98,7 +71,7 @@ app.use(helmet());
 app.use(cors());
 
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', mode: 'path-based-tunnels' });
+    res.json({ status: 'ok' });
 });
 
 // Mount routers
@@ -113,12 +86,12 @@ app.use(express.static(path.join(__dirname, '../admin-ui/dist')));
 
 // Handle React Router - serve index.html for non-API routes
 app.get('*', (req, res, next) => {
-  // Skip API routes and tunnel paths
-  if (req.path.startsWith('/api/') || req.path.startsWith('/tunnel/')) {
+  // Skip API routes and tunnel subdomains
+  if (req.path.startsWith('/api/')) {
     return next();
   }
   
-  // Skip tunnel subdomain requests (legacy)
+  // Skip tunnel subdomain requests
   const host = req.get('host');
   const tunnelDomain = process.env.TUNNEL_DOMAIN;
   if (host && tunnelDomain && host.endsWith(`.${tunnelDomain}`)) {
@@ -132,7 +105,7 @@ app.get('*', (req, res, next) => {
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== 'test') {
-  server.listen(PORT, () => console.log(`Server running on port ${PORT} with path-based tunnels`));
+  server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }
 
 // Handle unhandled promise rejections

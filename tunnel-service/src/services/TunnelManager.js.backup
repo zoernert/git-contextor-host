@@ -1,6 +1,6 @@
 const User = require('../models/User');
 const Tunnel = require('../models/Tunnel');
-const { generateTunnelPath } = require('../utils/tunnelPath');
+const { generateSubdomain } = require('../utils/subdomain');
 const { v4: uuidv4 } = require('uuid');
 const NginxManager = require('./NginxManager');
 const UsageTracker = require('./UsageTracker');
@@ -23,13 +23,22 @@ class TunnelManager {
         throw new Error('User not found');
     }
 
-    // 2. Generate unique tunnelPath
-    const tunnelPath = await generateTunnelPath(options.requestedPath);
+    // 2. Generate unique subdomain
+    const subdomain = await generateSubdomain(options.requestedSubdomain);
 
     // 3. Create Nginx proxy configuration
-    // 3. Skip Nginx proxy configuration for path-based tunnels
-    // const proxyConfig = await nginxManager.createProxyHost(tunnelPath);
-    const proxyConfig = { id: null, scheme: "https" };
+    const proxyConfig = await nginxManager.createProxyHost(subdomain);
+
+    // 4. Connection ID for WebSocket client to identify itself
+    const connectionId = uuidv4();
+
+    // 5. Store tunnel in database
+    const tunnel = new Tunnel({
+        userId,
+        localPort,
+        subdomain,
+        connectionId,
+        proxyHostId: proxyConfig.id,
         metadata: options.metadata || {},
         expiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000), // 8 hours expiry
         targetHost: 'localhost', // The client will connect to this service, so target is here.
@@ -153,7 +162,7 @@ class TunnelManager {
                 return;
             }
             
-            console.log(`[TunnelManager] Client connected for tunnel: ${tunnel.tunnelPath}`);
+            console.log(`[TunnelManager] Client connected for tunnel: ${tunnel.subdomain}`);
             ws.tunnelId = tunnel.id;
             ws.userId = tunnel.userId;
             this.connections.set(connectionId, ws);
@@ -162,12 +171,12 @@ class TunnelManager {
             ws.on('message', (responseMsg) => this.handleTunnelResponse(responseMsg, ws));
 
             ws.on('close', () => {
-                console.log(`[TunnelManager] Client disconnected for tunnel: ${tunnel.tunnelPath}`);
+                console.log(`[TunnelManager] Client disconnected for tunnel: ${tunnel.subdomain}`);
                 this.connections.delete(connectionId);
             });
             
             ws.on('error', (err) => {
-                 console.error(`[TunnelManager] WebSocket error for ${tunnel.tunnelPath}:`, err);
+                 console.error(`[TunnelManager] WebSocket error for ${tunnel.subdomain}:`, err);
                  this.connections.delete(connectionId);
             });
 
