@@ -17,6 +17,7 @@ BASE_URL="https://${PROD_SERVER}"
 TEST_PORT=8888
 TEST_PATH="test-$(date +%s)"
 LOCAL_TEST_SERVER_PID=""
+TUNNEL_CLIENT_PID=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -50,6 +51,12 @@ cleanup() {
     if [ -n "$LOCAL_TEST_SERVER_PID" ]; then
         kill $LOCAL_TEST_SERVER_PID 2>/dev/null || true
         success "Local test server stopped"
+    fi
+    
+    # Stop tunnel client
+    if [ -n "$TUNNEL_CLIENT_PID" ]; then
+        kill $TUNNEL_CLIENT_PID 2>/dev/null || true
+        success "Tunnel client stopped"
     fi
     
     # Delete test tunnel
@@ -178,6 +185,14 @@ create_tunnel() {
             TUNNEL_ID="$TEST_PATH"
         fi
         
+        # Extract connection ID
+        CONNECTION_ID=$(cat /tmp/tunnel_response.json | jq -r '.connectionId // .tunnel.connectionId' 2>/dev/null)
+        
+        if [ "$CONNECTION_ID" = "null" ] || [ -z "$CONNECTION_ID" ]; then
+            error "Could not extract connection ID from tunnel response"
+            return 1
+        fi
+        
         cat /tmp/tunnel_response.json | jq . 2>/dev/null || cat /tmp/tunnel_response.json
         
         # Extract tunnel URL
@@ -188,10 +203,41 @@ create_tunnel() {
         fi
         
         success "Tunnel URL: $TUNNEL_URL"
+        success "Connection ID: $CONNECTION_ID"
         
     else
         error "Tunnel creation failed - HTTP $response"
         cat /tmp/tunnel_response.json
+        return 1
+    fi
+}
+
+# Test 4.5: Start Tunnel Client
+start_tunnel_client() {
+    log "Starting tunnel client..."
+    
+    if [ -z "$CONNECTION_ID" ]; then
+        error "Connection ID not available - cannot start tunnel client"
+        return 1
+    fi
+    
+    # Start tunnel client
+    node tunnel-client.js "$BASE_URL" "$CONNECTION_ID" "$TEST_PORT" > /tmp/tunnel_client.log 2>&1 &
+    TUNNEL_CLIENT_PID=$!
+    
+    # Wait for tunnel client to connect
+    sleep 5
+    
+    # Check if tunnel client is running
+    if kill -0 $TUNNEL_CLIENT_PID 2>/dev/null; then
+        success "Tunnel client started successfully"
+        log "Tunnel client PID: $TUNNEL_CLIENT_PID"
+        
+        # Show recent logs
+        tail -n 5 /tmp/tunnel_client.log
+    else
+        error "Tunnel client failed to start"
+        cat /tmp/tunnel_client.log
         return 1
     fi
 }
@@ -319,6 +365,7 @@ run_tests() {
     test_auth
     start_local_server
     create_tunnel
+    start_tunnel_client
     test_tunnel_connectivity
     test_multiple_requests
     test_list_tunnels
@@ -355,6 +402,7 @@ case "${1:-test}" in
     create)
         start_local_server
         create_tunnel
+        start_tunnel_client
         success "Tunnel created. Access at: $TUNNEL_URL"
         success "Press Ctrl+C to stop and cleanup"
         wait
