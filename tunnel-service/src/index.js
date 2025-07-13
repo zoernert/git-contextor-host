@@ -32,20 +32,59 @@ const getRawBody = require('raw-body');
 const Tunnel = require('./models/Tunnel');
 
 // Path-based tunnel proxy middleware
-app.use('/tunnel/:tunnelPath(*)', async (req, res, next) => {
-    const tunnelPath = req.params.tunnelPath;
+app.use('/tunnel/:tunnelId/:path(*)', async (req, res, next) => {
+    const tunnelId = req.params.tunnelId;
+    const subPath = req.params.path || '';
     
     try {
-        const tunnel = await Tunnel.findOne({ tunnelPath, isActive: true });
+        const tunnel = await Tunnel.findOne({ tunnelPath: tunnelId, isActive: true });
         if (!tunnel) {
             return res.status(404).json({ 
                 error: 'Tunnel not found',
-                message: `Tunnel '${tunnelPath}' not found or is not active.`
+                message: `Tunnel '${tunnelId}' not found or is not active.`
             });
         }
 
         // Get raw body for proxying
         req.body = await getRawBody(req);
+        
+        // Update the request path to forward the correct path to the local server
+        req.originalUrl = `/${subPath}`;
+        req.url = `/${subPath}`;
+        req.path = `/${subPath}`;
+        
+        // Proxy the request to the tunnel client
+        TunnelManager.proxyRequest(tunnel.connectionId, req, res);
+
+    } catch (err) {
+        console.error('Tunnel proxy error:', err.message);
+        res.status(500).json({ 
+            error: 'Proxy Error',
+            message: 'Internal server error during tunnel proxying.'
+        });
+    }
+});
+
+// Handle tunnel root path (no subpath)
+app.use('/tunnel/:tunnelId', async (req, res, next) => {
+    const tunnelId = req.params.tunnelId;
+    
+    try {
+        const tunnel = await Tunnel.findOne({ tunnelPath: tunnelId, isActive: true });
+        if (!tunnel) {
+            return res.status(404).json({ 
+                error: 'Tunnel not found',
+                message: `Tunnel '${tunnelId}' not found or is not active.`
+            });
+        }
+
+        // Get raw body for proxying
+        req.body = await getRawBody(req);
+        
+        // Update the request path to forward to root
+        req.originalUrl = '/';
+        req.url = '/';
+        req.path = '/';
         
         // Proxy the request to the tunnel client
         TunnelManager.proxyRequest(tunnel.connectionId, req, res);
