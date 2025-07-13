@@ -21,6 +21,15 @@ const fetchTunnels = async () => {
   return data;
 };
 
+const fetchCollections = async () => {
+  const token = localStorage.getItem('token');
+  if (!token) return [];
+  const { data } = await axios.get('/api/qdrant/collections', {
+    headers: { 'x-auth-token': token },
+  });
+  return data;
+};
+
 export default function UserDashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -35,6 +44,10 @@ export default function UserDashboard() {
 
   const { data: tunnels, isLoading: isLoadingTunnels } = useQuery(['tunnels'], fetchTunnels, {
     enabled: !!user, // only fetch tunnels if user is loaded
+  });
+
+  const { data: collections, isLoading: isLoadingCollections } = useQuery(['collections'], fetchCollections, {
+    enabled: !!user, // only fetch collections if user is loaded
   });
 
   const destroyTunnelMutation = useMutation(
@@ -193,17 +206,75 @@ export default function UserDashboard() {
 
                 <div className="mt-8 bg-white shadow sm:rounded-lg">
                     <div className="px-4 py-5 sm:p-6">
-                        <h3 className="text-lg leading-6 font-medium text-gray-900">Qdrant Collections</h3>
-                        <div className="mt-2 max-w-xl text-sm text-gray-500">
-                            <p>Manage your hosted Qdrant vector collections for Git Contextor.</p>
-                        </div>
-                        <div className="mt-5">
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-lg leading-6 font-medium text-gray-900">Qdrant Collections</h3>
                             <Link
                                 to="/qdrant"
-                                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                                className="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                             >
                                 Manage Collections
                             </Link>
+                        </div>
+                        <div className="mt-4">
+                            {isLoadingCollections ? (
+                                <p>Loading collections...</p>
+                            ) : collections && collections.length > 0 ? (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    {collections.map(collection => (
+                                        <div key={collection._id} className="border border-gray-200 rounded-lg p-4">
+                                            <div className="flex justify-between items-start">
+                                                <div className="flex-1">
+                                                    <h4 className="text-sm font-medium text-gray-900">{collection.name}</h4>
+                                                    <p className="text-xs text-gray-500 mt-1">{collection.config.description || 'No description'}</p>
+                                                </div>
+                                                <div className="flex items-center">
+                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                        Active
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 grid grid-cols-2 gap-4 text-xs">
+                                                <div>
+                                                    <span className="text-gray-500">Vectors:</span>
+                                                    <span className="ml-1 font-medium">{collection.usage.vectorCount}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-gray-500">Size:</span>
+                                                    <span className="ml-1 font-medium">{collection.config.vectorSize}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-gray-500">Distance:</span>
+                                                    <span className="ml-1 font-medium">{collection.config.distance}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="text-gray-500">Last Used:</span>
+                                                    <span className="ml-1 font-medium">
+                                                        {new Date(collection.usage.lastAccessed).toLocaleDateString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 flex items-center">
+                                                <svg className="h-4 w-4 text-gray-400 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                                </svg>
+                                                <code className="text-xs text-gray-600 break-all">
+                                                    {collection.tunnelInfo?.url || 'No tunnel URL'}
+                                                </code>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-6">
+                                    <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                    </svg>
+                                    <p className="mt-2 text-sm text-gray-500">No collections yet</p>
+                                    <p className="text-xs text-gray-400 mt-1">
+                                        Create your first Qdrant collection to start storing vectors for Git Contextor
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
