@@ -4,11 +4,7 @@ const auth = require('../middleware/auth');
 const User = require('../models/User');
 const QdrantCollection = require('../models/QdrantCollection');
 const QdrantService = require('../services/QdrantService');
-const QdrantTunnelManager = require('../services/QdrantTunnelManager');
 const plansConfig = require('../config/plans');
-
-// Initialize Qdrant Tunnel Manager
-const qdrantTunnelManager = new QdrantTunnelManager();
 
 // @route   GET api/qdrant/collections
 // @desc    Get user's Qdrant collections
@@ -89,30 +85,6 @@ router.post('/collections', auth, async (req, res) => {
 
         await newCollection.save();
 
-        // Create tunnel for direct access
-        try {
-            const tunnelInfo = await qdrantTunnelManager.createQdrantTunnel(
-                req.user.id, 
-                newCollection._id, 
-                `Direct access to ${name} collection`
-            );
-
-            // Update collection with tunnel info
-            newCollection.tunnelInfo = {
-                tunnelId: tunnelInfo.tunnelId,
-                connectionId: tunnelInfo.connectionId,
-                tunnelPath: tunnelInfo.tunnelPath,
-                url: tunnelInfo.qdrantUrl,
-                apiKey: tunnelInfo.connectionInfo.apiKey,
-                lastTunnelUpdate: new Date()
-            };
-
-            await newCollection.save();
-        } catch (tunnelError) {
-            console.error('Failed to create tunnel for collection:', tunnelError);
-            // Don't fail the collection creation if tunnel creation fails
-        }
-
         res.status(201).json(newCollection);
     } catch (err) {
         res.status(500).json({ msg: err.message || 'Server Error' });
@@ -139,40 +111,18 @@ router.get('/collections/:id/connection', auth, async (req, res) => {
             return res.status(404).json({ msg: 'Collection not found' });
         }
 
-        // Get or create tunnel connection info
-        let connectionInfo;
-        try {
-            connectionInfo = await qdrantTunnelManager.getCollectionConnectionInfo(
-                req.user.id, 
-                collection._id
-            );
-        } catch (tunnelError) {
-            // If no tunnel exists, create one
-            try {
-                const tunnelInfo = await qdrantTunnelManager.createQdrantTunnel(
-                    req.user.id, 
-                    collection._id, 
-                    `Direct access to ${collection.name} collection`
-                );
-
-                connectionInfo = tunnelInfo.connectionInfo;
-
-                // Update collection with tunnel info
-                collection.tunnelInfo = {
-                    tunnelId: tunnelInfo.tunnelId,
-                    connectionId: tunnelInfo.connectionId,
-                    tunnelPath: tunnelInfo.tunnelPath,
-                    url: tunnelInfo.qdrantUrl,
-                    apiKey: tunnelInfo.connectionInfo.apiKey,
-                    lastTunnelUpdate: new Date()
-                };
-
-                await collection.save();
-            } catch (createError) {
-                console.error('Failed to create tunnel:', createError);
-                return res.status(500).json({ msg: 'Failed to create connection' });
-            }
+        // Get user's API key for authentication
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return res.status(404).json({ msg: 'User not found' });
         }
+        
+        const connectionInfo = {
+            url: `${process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud'}/api/qdrant/collections/${collection._id}`,
+            apiKey: user.apiKey,
+            collectionName: collection.name,
+            internalCollectionName: collection.collectionName
+        };
 
         // Provide connection examples
         const response = {
@@ -234,8 +184,8 @@ curl -X POST "${connectionInfo.url}/collections/${collection.name}/points/search
 
         res.json(response);
     } catch (err) {
-        console.error('Error getting connection info:', err);
-        res.status(500).json({ msg: 'Server Error' });
+        console.error(err.message);
+        res.status(500).send('Server Error');
     }
 });
 
@@ -325,15 +275,6 @@ router.delete('/collections/:id', auth, async (req, res) => {
         const collection = await QdrantCollection.findOne({ _id: req.params.id, userId: req.user.id });
         if (!collection) {
             return res.status(404).json({ msg: 'Collection not found or permission denied.' });
-        }
-
-        // Delete tunnel if it exists
-        if (collection.tunnelInfo?.tunnelId) {
-            try {
-                await qdrantTunnelManager.deleteQdrantTunnel(req.user.id, collection.tunnelInfo.tunnelId);
-            } catch (tunnelError) {
-                console.error('Failed to delete tunnel:', tunnelError);
-            }
         }
 
         // Delete from Qdrant

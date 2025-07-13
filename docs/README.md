@@ -139,6 +139,70 @@ client = QdrantClient(
 1. **Connection Failed**: Check API key and collection status
 2. **Version Compatibility**: Use `checkCompatibility: false`
 3. **Authentication**: Verify Bearer token format
+4. **Tunnel ID Mismatch**: Frontend shows different ID than WebSocket connection
+
+### Tunnel ID Mismatch Debugging
+
+If you get "Bad Gateway: Tunnel client not connected" but your tunnel client connects successfully:
+
+1. **Check WebSocket vs HTTP IDs**: Your service uses different IDs for WebSocket and HTTP
+   ```
+   WebSocket: wss://tunnel.corrently.cloud/ws/tunnel/WEBSOCKET_CONNECTION_ID
+   HTTP: https://tunnel.corrently.cloud/tunnel/HTTP_TUNNEL_PATH
+   ```
+
+2. **Get Tunnel Info**: Use the API to get the correct URLs
+   ```bash
+   # List all tunnels
+   curl -H "Authorization: Bearer YOUR_API_KEY" \
+     https://tunnel.corrently.cloud/api/tunnels
+   
+   # Look for the "url" field in the response
+   ```
+
+3. **Use Provided URLs**: Don't construct URLs manually - use the `url` field from API response
+   ```javascript
+   // ✅ CORRECT - Use provided URL
+   const response = await fetch('/api/tunnels', {
+     headers: { 'Authorization': 'Bearer YOUR_API_KEY' }
+   });
+   const tunnels = await response.json();
+   const tunnelUrl = tunnels[0].url; // Use this URL directly
+   
+   // ❌ WRONG - Don't use WebSocket connectionId for HTTP
+   const wrongUrl = `https://tunnel.corrently.cloud/tunnel/${connectionId}`;
+   ```
+
+4. **Check Tunnel Status**: Verify the tunnel is active and not expired
+   ```bash
+   # Check if tunnel client is actually connected and forwarding requests
+   curl -H "api-key: YOUR_API_KEY" \
+     https://tunnel.corrently.cloud/tunnel/TUNNEL_PATH/collections
+   ```
+
+5. **WebSocket Connection Issues**: If tunnel client connects but keeps disconnecting:
+   ```bash
+   # Check WebSocket logs for connection issues
+   # Common issues:
+   # - Code 1006: Abnormal closure (server timeout, protocol error)
+   # - Code 1000: Normal closure
+   # - Code 1001: Going away (server restart)
+   
+   # Verify you're using the correct connectionId for WebSocket
+   node tunnel-client.js https://tunnel.corrently.cloud CONNECTION_ID LOCAL_PORT
+   ```
+
+6. **Test Correct Tunnel Path**: Don't test random tunnel paths
+   ```bash
+   # ✅ CORRECT - Use tunnelPath from API response
+   # From /api/tunnels response: "tunnelPath": "9GWrBx8NLEfQ"
+   curl -H "api-key: YOUR_API_KEY" \
+     https://tunnel.corrently.cloud/tunnel/9GWrBx8NLEfQ/collections
+   
+   # ❌ WRONG - Random tunnel path
+   curl -H "api-key: YOUR_API_KEY" \
+     https://tunnel.corrently.cloud/tunnel/DX_J5-JZOutX/collections
+   ```
 
 ### Getting Help
 - 📖 Check the relevant documentation section

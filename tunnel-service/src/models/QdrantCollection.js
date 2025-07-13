@@ -19,16 +19,14 @@ const QdrantCollectionSchema = new mongoose.Schema({
     distance: { type: String, default: 'Cosine' },
     description: String
   },
-  tunnelInfo: {
-    tunnelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tunnel' },
-    connectionId: String,
-    tunnelPath: String,
-    url: String,
-    apiKey: String,
-    lastTunnelUpdate: { type: Date, default: Date.now }
-  },
   isActive: { type: Boolean, default: true },
   createdAt: { type: Date, default: Date.now }
+});
+
+// Qdrant API URL virtual
+QdrantCollectionSchema.virtual('apiUrl').get(function() {
+    const baseUrl = process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud';
+    return `${baseUrl}/api/qdrant/collections/${this._id}`;
 });
 
 // Index for efficient queries

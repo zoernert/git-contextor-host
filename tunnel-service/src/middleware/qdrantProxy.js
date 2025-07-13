@@ -33,190 +33,106 @@ class QdrantProxyMiddleware {
     }
 
     /**
-     * Map user collection name to internal collection name
-     */
-    mapCollectionName(userCollectionName, userId, userCollections) {
-        // Find the collection by user-friendly name
-        const collection = userCollections.find(c => c.name === userCollectionName);
-        if (!collection) {
-            throw new Error(`Collection '${userCollectionName}' not found`);
-        }
-        return collection.collectionName; // Returns user-{userId}-{name}
-    }
-
-    /**
-     * Map internal collection name back to user collection name
-     */
-    reverseMapCollectionName(internalCollectionName, userId, userCollections) {
-        const collection = userCollections.find(c => c.collectionName === internalCollectionName);
-        return collection ? collection.name : internalCollectionName;
-    }
-
-    /**
-     * Rewrite request body to use internal collection names
-     */
-    rewriteRequestBody(body, userId, userCollections) {
-        if (!body) return body;
-
-        const rewrittenBody = JSON.parse(JSON.stringify(body));
-
-        // Handle different Qdrant API endpoints
-        if (rewrittenBody.collection_name) {
-            rewrittenBody.collection_name = this.mapCollectionName(
-                rewrittenBody.collection_name, 
-                userId, 
-                userCollections
-            );
-        }
-
-        // Handle batch operations
-        if (rewrittenBody.batch && Array.isArray(rewrittenBody.batch)) {
-            rewrittenBody.batch = rewrittenBody.batch.map(item => {
-                if (item.collection_name) {
-                    item.collection_name = this.mapCollectionName(
-                        item.collection_name, 
-                        userId, 
-                        userCollections
-                    );
-                }
-                return item;
-            });
-        }
-
-        return rewrittenBody;
-    }
-
-    /**
-     * Rewrite response body to use user collection names
-     */
-    rewriteResponseBody(body, userId, userCollections) {
-        if (!body) return body;
-
-        const rewrittenBody = JSON.parse(JSON.stringify(body));
-
-        // Handle collections list response
-        if (rewrittenBody.result && rewrittenBody.result.collections) {
-            rewrittenBody.result.collections = rewrittenBody.result.collections
-                .filter(collection => {
-                    // Only show collections that belong to this user
-                    return collection.name.startsWith(`user-${userId}-`);
-                })
-                .map(collection => ({
-                    ...collection,
-                    name: this.reverseMapCollectionName(collection.name, userId, userCollections)
-                }));
-        }
-
-        // Handle single collection response
-        if (rewrittenBody.result && rewrittenBody.result.collection_name) {
-            rewrittenBody.result.collection_name = this.reverseMapCollectionName(
-                rewrittenBody.result.collection_name, 
-                userId, 
-                userCollections
-            );
-        }
-
-        return rewrittenBody;
-    }
-
-    /**
-     * Proxy middleware for Qdrant requests
+     * Proxy request to Qdrant API with collection-specific access control
      */
     async proxyRequest(req, res, next) {
         try {
-            // Extract API key from headers
-            const apiKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
-            
+            // Extract collection ID from path
+            const collectionId = req.params.collectionId;
+            if (!collectionId) {
+                return res.status(400).json({ error: 'Collection ID is required' });
+            }
+
+            // Get API key from header
+            const apiKey = req.headers['api-key'] || req.headers['authorization']?.replace('Bearer ', '');
             if (!apiKey) {
-                return res.status(401).json({ error: 'API key required' });
+                return res.status(401).json({ error: 'API key is required' });
             }
 
-            // Authenticate user
+            // Authenticate user and get their collections
             const { user, collections } = await this.authenticateUser(apiKey);
-
-            // For mock mode, return mock responses
-            if (QdrantService.mock) {
-                return this.handleMockRequest(req, res, user, collections);
+            
+            // Find the specific collection
+            const collection = collections.find(c => c._id.toString() === collectionId);
+            if (!collection) {
+                return res.status(404).json({ error: 'Collection not found or access denied' });
             }
 
-            // Get the original request body
-            const originalBody = req.body;
-
-            // Rewrite request body to use internal collection names
-            const rewrittenBody = this.rewriteRequestBody(originalBody, user._id, collections);
-
-            // Make request to actual Qdrant service
-            const qdrantResponse = await this.forwardToQdrant(req, rewrittenBody);
-
-            // Rewrite response body to use user collection names
-            const rewrittenResponse = this.rewriteResponseBody(qdrantResponse, user._id, collections);
-
-            res.json(rewrittenResponse);
-
+            // Handle different API paths
+            const apiPath = req.params[0] || '';
+            
+            if (this.actualQdrantClient) {
+                // Forward to actual Qdrant service
+                await this.forwardToQdrant(req, res, collection, apiPath);
+            } else {
+                // Mock mode
+                res.json({ 
+                    status: 'ok', 
+                    mode: 'mock',
+                    collection: collection.name,
+                    path: apiPath
+                });
+            }
         } catch (error) {
             console.error('Qdrant proxy error:', error);
-            res.status(error.status || 500).json({ 
-                error: error.message || 'Internal server error' 
-            });
+            res.status(500).json({ error: 'Internal server error' });
         }
     }
 
     /**
      * Forward request to actual Qdrant service
      */
-    async forwardToQdrant(req, body) {
-        const url = `${process.env.QDRANT_URL}${req.path}`;
-        const headers = {
-            'Content-Type': 'application/json',
-            'Api-Key': process.env.QDRANT_API_KEY
-        };
+    async forwardToQdrant(req, res, collection, apiPath) {
+        try {
+            const method = req.method.toLowerCase();
+            const internalCollectionName = collection.collectionName;
+            
+            // Map common API paths
+            let qdrantPath = '';
+            if (apiPath.startsWith('collections')) {
+                qdrantPath = apiPath.replace(/^collections\/[^\/]+/, `collections/${internalCollectionName}`);
+            } else if (apiPath.startsWith('points')) {
+                qdrantPath = `collections/${internalCollectionName}/${apiPath}`;
+            } else {
+                qdrantPath = `collections/${internalCollectionName}/${apiPath}`;
+            }
 
-        const response = await fetch(url, {
-            method: req.method,
-            headers,
-            body: body ? JSON.stringify(body) : undefined
-        });
+            // Execute the appropriate Qdrant client method
+            let result;
+            switch (method) {
+                case 'get':
+                    if (qdrantPath.includes('/points/search')) {
+                        result = await this.actualQdrantClient.search(internalCollectionName, req.body || {});
+                    } else if (qdrantPath.includes('/points')) {
+                        result = await this.actualQdrantClient.retrieve(internalCollectionName, req.body || {});
+                    } else {
+                        result = await this.actualQdrantClient.getCollection(internalCollectionName);
+                    }
+                    break;
+                case 'post':
+                    if (qdrantPath.includes('/points/search')) {
+                        result = await this.actualQdrantClient.search(internalCollectionName, req.body);
+                    } else if (qdrantPath.includes('/points')) {
+                        result = await this.actualQdrantClient.upsert(internalCollectionName, req.body);
+                    }
+                    break;
+                case 'put':
+                    result = await this.actualQdrantClient.upsert(internalCollectionName, req.body);
+                    break;
+                case 'delete':
+                    if (qdrantPath.includes('/points')) {
+                        result = await this.actualQdrantClient.delete(internalCollectionName, req.body);
+                    }
+                    break;
+                default:
+                    return res.status(405).json({ error: 'Method not allowed' });
+            }
 
-        if (!response.ok) {
-            throw new Error(`Qdrant request failed: ${response.statusText}`);
+            res.json(result);
+        } catch (error) {
+            console.error('Qdrant forwarding error:', error);
+            res.status(500).json({ error: 'Failed to process request' });
         }
-
-        return await response.json();
-    }
-
-    /**
-     * Handle mock requests for testing
-     */
-    handleMockRequest(req, res, user, collections) {
-        console.log(`[QdrantProxy MOCK] ${req.method} ${req.path} for user ${user._id}`);
-        
-        // Mock response based on endpoint
-        if (req.path === '/collections') {
-            return res.json({
-                result: {
-                    collections: collections.map(col => ({
-                        name: col.name,
-                        status: 'green',
-                        vectors_count: col.usage.vectorCount || 0,
-                        config: {
-                            params: {
-                                vectors: {
-                                    size: 1536,
-                                    distance: 'Cosine'
-                                }
-                            }
-                        }
-                    }))
-                }
-            });
-        }
-
-        // Default mock response
-        res.json({
-            result: true,
-            status: 'ok',
-            time: 0.001
-        });
     }
 }
 

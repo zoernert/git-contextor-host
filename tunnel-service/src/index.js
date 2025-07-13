@@ -59,41 +59,6 @@ app.use('/tunnel/:tunnelPath(*)', async (req, res, next) => {
     }
 });
 
-// Qdrant proxy middleware for direct API access
-app.use('/qdrant/:tunnelPath(*)', async (req, res, next) => {
-    const tunnelPath = req.params.tunnelPath;
-    
-    try {
-        const tunnel = await Tunnel.findOne({ 
-            tunnelPath, 
-            isActive: true,
-            'metadata.type': 'qdrant'
-        });
-        
-        if (!tunnel) {
-            return res.status(404).json({ 
-                error: 'Qdrant tunnel not found',
-                message: `Qdrant tunnel '${tunnelPath}' not found or is not active.`
-            });
-        }
-
-        // Parse JSON body for Qdrant API calls
-        if (req.headers['content-type'] === 'application/json') {
-            req.body = JSON.parse(await getRawBody(req));
-        }
-
-        // Use Qdrant proxy middleware
-        await qdrantProxy.proxyRequest(req, res, next);
-
-    } catch (err) {
-        console.error('Qdrant proxy error:', err.message);
-        res.status(500).json({ 
-            error: 'Qdrant Proxy Error',
-            message: 'Internal server error during Qdrant proxying.'
-        });
-    }
-});
-
 // Legacy subdomain support (for backward compatibility)
 app.use(async (req, res, next) => {
     // Skip API requests and tunnel paths
