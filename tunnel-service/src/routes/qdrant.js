@@ -259,37 +259,23 @@ router.post('/collections/:id/test-connection', auth, async (req, res) => {
             return res.status(404).json({ msg: 'Collection not found' });
         }
 
-        // Test connection
-        if (collection.tunnelInfo?.url) {
-            try {
-                const testResponse = await fetch(`${collection.tunnelInfo.url}/collections`, {
-                    method: 'GET',
-                    headers: {
-                        'Api-Key': collection.tunnelInfo.apiKey,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                const success = testResponse.ok;
-                
-                res.json({
-                    success,
-                    status: testResponse.status,
-                    message: success ? 'Connection successful' : 'Connection failed',
-                    timestamp: new Date().toISOString()
-                });
-            } catch (testError) {
-                res.json({
-                    success: false,
-                    message: 'Connection test failed',
-                    error: testError.message,
-                    timestamp: new Date().toISOString()
-                });
-            }
-        } else {
+        // Test connection by attempting to get collection info from Qdrant
+        try {
+            const collectionInfo = await QdrantService.getCollectionInfo(collection.collectionName);
+            
+            res.json({
+                success: true,
+                message: 'Connection successful',
+                collectionInfo: collectionInfo,
+                timestamp: new Date().toISOString()
+            });
+        } catch (testError) {
+            console.error('Collection connection test failed:', testError);
+            
             res.json({
                 success: false,
-                message: 'No tunnel connection available',
+                message: 'Connection failed',
+                error: testError.message,
                 timestamp: new Date().toISOString()
             });
         }
