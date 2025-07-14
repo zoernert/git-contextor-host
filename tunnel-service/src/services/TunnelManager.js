@@ -49,8 +49,20 @@ class TunnelManager {
 
     await tunnel.save();
 
-    // 6. Return tunnel details
-    return tunnel.toObject();
+    // 6. Return tunnel details with proper URL format
+    const baseUrl = process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud';
+    
+    return {
+        id: tunnel._id,                    // Database ID for internal use
+        tunnelPath: tunnel.tunnelPath,     // URL path identifier
+        connectionId: tunnel.connectionId, // WebSocket connection ID
+        url: `${baseUrl}/tunnel/${tunnel.tunnelPath}`, // Complete tunnel URL
+        localPort: tunnel.localPort,
+        subdomain: tunnel.subdomain,       // Legacy compatibility
+        isActive: tunnel.isActive,
+        expiresAt: tunnel.expiresAt,
+        createdAt: tunnel.createdAt
+    };
   }
 
   async destroyTunnel(tunnelId, userId) {
