@@ -53,7 +53,7 @@ class TunnelManager {
     const baseUrl = process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud';
     
     return {
-        id: tunnel._id,                    // Database ID for internal use
+        id: tunnel._id.toString(),         // Database ID for internal use
         tunnelPath: tunnel.tunnelPath,     // URL path identifier
         connectionId: tunnel.connectionId, // WebSocket connection ID
         url: `${baseUrl}/tunnel/${tunnel.tunnelPath}`, // Complete tunnel URL
