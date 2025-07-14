@@ -223,10 +223,12 @@ describe('TunnelManager', () => {
         it('should handle http response successfully', async () => {
             const responseMessage = JSON.stringify({
                 type: 'http-response',
-                requestId: 'test-request-id',
-                status: 200,
-                headers: { 'content-type': 'application/json' },
-                body: Buffer.from('{"result": "success"}').toString('base64')
+                data: {
+                    id: 'test-request-id',
+                    status: 200,
+                    headers: { 'content-type': 'application/json' },
+                    body: Buffer.from('{"result": "success"}').toString('base64')
+                }
             });
 
             await TunnelManager.handleTunnelResponse(responseMessage, mockWs);
@@ -242,10 +244,12 @@ describe('TunnelManager', () => {
 
             const responseMessage = JSON.stringify({
                 type: 'http-response',
-                requestId: 'test-request-id',
-                status: 200,
-                headers: {},
-                body: Buffer.from('large response').toString('base64')
+                data: {
+                    id: 'test-request-id',
+                    status: 200,
+                    headers: {},
+                    body: Buffer.from('large response').toString('base64')
+                }
             });
 
             await TunnelManager.handleTunnelResponse(responseMessage, mockWs);
@@ -282,24 +286,14 @@ describe('TunnelManager', () => {
             };
         });
 
-        it('should handle valid connection', () => {
-            TunnelManager.handleConnection(mockWs);
+        it('should handle valid connection', async () => {
+            await TunnelManager.handleConnection(mockWs, tunnel.connectionId);
 
-            expect(mockWs.once).toHaveBeenCalledWith('message', expect.any(Function));
+            expect(mockWs.on).toHaveBeenCalledWith('message', expect.any(Function));
         });
 
         it('should authenticate connection with valid connectionId', async () => {
-            let messageHandler;
-            mockWs.once.mockImplementation((event, handler) => {
-                if (event === 'message') {
-                    messageHandler = handler;
-                }
-            });
-
-            TunnelManager.handleConnection(mockWs);
-
-            const authMessage = JSON.stringify({ connectionId: tunnel.connectionId });
-            await messageHandler(authMessage);
+            await TunnelManager.handleConnection(mockWs, tunnel.connectionId);
 
             expect(mockWs.tunnelId).toBe(tunnel.id);
             expect(mockWs.userId.toString()).toBe(tunnel.userId.toString());
@@ -307,17 +301,7 @@ describe('TunnelManager', () => {
         });
 
         it('should reject invalid connectionId', async () => {
-            let messageHandler;
-            mockWs.once.mockImplementation((event, handler) => {
-                if (event === 'message') {
-                    messageHandler = handler;
-                }
-            });
-
-            TunnelManager.handleConnection(mockWs);
-
-            const authMessage = JSON.stringify({ connectionId: 'invalid-id' });
-            await messageHandler(authMessage);
+            await TunnelManager.handleConnection(mockWs, 'invalid-id');
 
             expect(mockWs.terminate).toHaveBeenCalled();
         });

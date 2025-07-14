@@ -103,13 +103,19 @@ class TunnelManager {
         this.httpRequests.delete(requestId);
     });
 
+    // Extract the path that should be forwarded to the tunnel client
+    // The req.tunnelPath is set by the routing middleware
+    const forwardPath = req.tunnelPath || '/';
+
     const requestData = {
         type: 'http-request',
-        requestId,
-        method: req.method,
-        url: req.originalUrl,
-        headers: req.headers,
-        body: requestBody.toString('base64'),
+        data: {
+            id: requestId,
+            method: req.method,
+            path: forwardPath,
+            headers: req.headers,
+            body: requestBody.length > 0 ? requestBody.toString('base64') : null
+        }
     };
 
     ws.send(JSON.stringify(requestData));
@@ -118,15 +124,15 @@ class TunnelManager {
   async handleTunnelResponse(message, ws) {
     try {
         const data = JSON.parse(message);
-        if (data.type === 'http-response' && data.requestId) {
-            const res = this.httpRequests.get(data.requestId);
+        if (data.type === 'http-response' && data.data && data.data.id) {
+            const res = this.httpRequests.get(data.data.id);
             if (res) {
-                const responseBody = Buffer.from(data.body, 'base64');
+                const responseBody = data.data.body ? Buffer.from(data.data.body, 'base64') : Buffer.alloc(0);
                 // Check usage and track it
                 const canTransfer = await UsageTracker.canTransfer(ws.userId, responseBody.length);
                 if (!canTransfer) {
                     res.status(403).send('Data transfer limit reached during response.');
-                    this.httpRequests.delete(data.requestId);
+                    this.httpRequests.delete(data.data.id);
                     ws.terminate();
                     return;
                 }
@@ -134,59 +140,58 @@ class TunnelManager {
                    await UsageTracker.trackData({ _id: ws.tunnelId, userId: ws.userId }, responseBody.length);
                 }
 
-                this.httpRequests.delete(data.requestId);
-                res.status(data.status);
-                res.set(data.headers);
+                this.httpRequests.delete(data.data.id);
+                res.status(data.data.status || 200);
+                res.set(data.data.headers || {});
                 res.send(responseBody);
             }
+        } else if (data.type === 'ping') {
+            // Handle ping messages
+            ws.send(JSON.stringify({ type: 'pong' }));
         }
     } catch (err) {
         console.error(`[TunnelManager] Error processing response from client:`, err);
     }
   }
 
-  handleConnection(ws) {
-    // The client should send its connectionId immediately upon connection.
-    ws.once('message', async (message) => {
-        try {
-            const data = JSON.parse(message);
-            const { connectionId } = data;
+  async handleConnection(ws, connectionId) {
+    // Use the provided connectionId from the WebSocket server
+    if (!connectionId) {
+        console.log(`[TunnelManager] No connectionId provided`);
+        ws.terminate();
+        return;
+    }
 
-            if (!connectionId) {
-                ws.terminate();
-                return;
-            }
-
-            const tunnel = await Tunnel.findOne({ connectionId, isActive: true });
-            if (!tunnel) {
-                console.log(`[TunnelManager] Invalid or inactive tunnel for connectionId: ${connectionId}`);
-                ws.terminate();
-                return;
-            }
-            
-            console.log(`[TunnelManager] Client connected for tunnel: ${tunnel.tunnelPath}`);
-            ws.tunnelId = tunnel.id;
-            ws.userId = tunnel.userId;
-            this.connections.set(connectionId, ws);
-            
-            // Handle responses from the tunnel client
-            ws.on('message', (responseMsg) => this.handleTunnelResponse(responseMsg, ws));
-
-            ws.on('close', () => {
-                console.log(`[TunnelManager] Client disconnected for tunnel: ${tunnel.tunnelPath}`);
-                this.connections.delete(connectionId);
-            });
-            
-            ws.on('error', (err) => {
-                 console.error(`[TunnelManager] WebSocket error for ${tunnel.tunnelPath}:`, err);
-                 this.connections.delete(connectionId);
-            });
-
-        } catch (err) {
-            console.error('[TunnelManager] Error processing auth message from client:', err);
+    // Find the tunnel by connectionId
+    try {
+        const tunnel = await Tunnel.findOne({ connectionId, isActive: true });
+        if (!tunnel) {
+            console.log(`[TunnelManager] Invalid or inactive tunnel for connectionId: ${connectionId}`);
             ws.terminate();
+            return;
         }
-    });
+        
+        console.log(`[TunnelManager] Client connected for tunnel: ${tunnel.tunnelPath}`);
+        ws.tunnelId = tunnel.id;
+        ws.userId = tunnel.userId;
+        this.connections.set(connectionId, ws);
+        
+        // Handle responses from the tunnel client
+        ws.on('message', (responseMsg) => this.handleTunnelResponse(responseMsg, ws));
+
+        ws.on('close', () => {
+            console.log(`[TunnelManager] Client disconnected for tunnel: ${tunnel.tunnelPath}`);
+            this.connections.delete(connectionId);
+        });
+        
+        ws.on('error', (err) => {
+             console.error(`[TunnelManager] WebSocket error for ${tunnel.tunnelPath}:`, err);
+             this.connections.delete(connectionId);
+        });
+    } catch (err) {
+        console.error('[TunnelManager] Error finding tunnel:', err);
+        ws.terminate();
+    }
   }
 }
 

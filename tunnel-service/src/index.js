@@ -22,19 +22,55 @@ const wss = new WebSocketServer({ server });
 const QdrantProxyMiddleware = require('./middleware/qdrantProxy');
 const qdrantProxy = new QdrantProxyMiddleware();
 
-// Handle WebSocket connections
-wss.on('connection', (ws) => {
-    TunnelManager.handleConnection(ws);
+// Handle WebSocket connections with proper error handling
+wss.on('connection', (ws, req) => {
+    console.log(`[WebSocket] New connection from ${req.socket.remoteAddress}`);
+    
+    // Set up initial connection timeout
+    const connectionTimeout = setTimeout(() => {
+        console.log(`[WebSocket] Connection timeout - no authentication received`);
+        ws.terminate();
+    }, 5000); // 5 second timeout for authentication
+    
+    // Handle authentication message
+    ws.once('message', (message) => {
+        clearTimeout(connectionTimeout);
+        try {
+            const data = JSON.parse(message);
+            if (data.connectionId) {
+                console.log(`[WebSocket] Authentication attempt for connectionId: ${data.connectionId}`);
+                TunnelManager.handleConnection(ws, data.connectionId);
+            } else {
+                console.log(`[WebSocket] Invalid authentication message - missing connectionId`);
+                ws.terminate();
+            }
+        } catch (err) {
+            console.error(`[WebSocket] Error parsing authentication message:`, err);
+            ws.terminate();
+        }
+    });
+    
+    // Handle connection errors
+    ws.on('error', (err) => {
+        clearTimeout(connectionTimeout);
+        console.error(`[WebSocket] Connection error:`, err);
+    });
+    
+    // Handle connection close
+    ws.on('close', (code, reason) => {
+        clearTimeout(connectionTimeout);
+        console.log(`[WebSocket] Connection closed: ${code} - ${reason}`);
+    });
 });
 
 // Proxy requests to tunnel clients before any body parsers
 const getRawBody = require('raw-body');
 const Tunnel = require('./models/Tunnel');
 
-// Path-based tunnel proxy middleware
-app.use('/tunnel/:tunnelId/:path(*)', async (req, res, next) => {
+// Path-based tunnel proxy middleware - Handle subpaths first
+app.use('/tunnel/:tunnelId/*', async (req, res, next) => {
     const tunnelId = req.params.tunnelId;
-    const subPath = req.params.path || '';
+    const subPath = req.params[0] || '';
     
     try {
         const tunnel = await Tunnel.findOne({ tunnelPath: tunnelId, isActive: true });
@@ -48,10 +84,11 @@ app.use('/tunnel/:tunnelId/:path(*)', async (req, res, next) => {
         // Get raw body for proxying
         req.body = await getRawBody(req);
         
-        // Update the request path to forward the correct path to the local server
-        req.originalUrl = `/${subPath}`;
-        req.url = `/${subPath}`;
-        req.path = `/${subPath}`;
+        // Set the path that should be forwarded to the tunnel client
+        const forwardPath = subPath ? `/${subPath}` : '/';
+        req.tunnelPath = forwardPath;
+        
+        console.log(`[TunnelProxy] Forwarding ${req.method} /tunnel/${tunnelId}/${subPath || ''} -> ${forwardPath}`);
         
         // Proxy the request to the tunnel client
         TunnelManager.proxyRequest(tunnel.connectionId, req, res);
@@ -81,10 +118,10 @@ app.use('/tunnel/:tunnelId', async (req, res, next) => {
         // Get raw body for proxying
         req.body = await getRawBody(req);
         
-        // Update the request path to forward to root
-        req.originalUrl = '/';
-        req.url = '/';
-        req.path = '/';
+        // Set the path that should be forwarded to the tunnel client (root path)
+        req.tunnelPath = '/';
+        
+        console.log(`[TunnelProxy] Forwarding ${req.method} /tunnel/${tunnelId} -> /`);
         
         // Proxy the request to the tunnel client
         TunnelManager.proxyRequest(tunnel.connectionId, req, res);

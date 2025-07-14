@@ -41,7 +41,9 @@ class TunnelClient {
             this.ws.on('close', (code, reason) => {
                 console.log(`[TunnelClient] WebSocket disconnected: ${code} - ${reason}`);
                 this.connected = false;
-                this.attemptReconnect();
+                if (code !== 1000) { // 1000 is normal closure
+                    this.attemptReconnect();
+                }
             });
             
             this.ws.on('error', (err) => {
@@ -81,7 +83,7 @@ class TunnelClient {
             console.log(`[TunnelClient] Received message:`, JSON.stringify(data, null, 2));
             
             if (data.type === 'http-request') {
-                this.handleHttpRequest(data);
+                this.handleHttpRequest(data.data);
             } else if (data.type === 'pong') {
                 // Pong received, connection is alive
                 console.log(`[TunnelClient] Received pong`);
@@ -95,14 +97,14 @@ class TunnelClient {
     }
 
     handleHttpRequest(data) {
-        const { requestId, method, url, headers, body } = data;
+        const { id, method, path, headers, body } = data;
         
-        console.log(`[TunnelClient] Forwarding ${method} ${url} to localhost:${this.localPort}`);
+        console.log(`[TunnelClient] Forwarding ${method} ${path} to localhost:${this.localPort}`);
         
         const options = {
             hostname: 'localhost',
             port: this.localPort,
-            path: url,
+            path: path,
             method: method,
             headers: headers
         };
@@ -117,18 +119,20 @@ class TunnelClient {
             res.on('end', () => {
                 const response = {
                     type: 'http-response',
-                    requestId: requestId,
-                    status: res.statusCode,
-                    statusText: res.statusMessage,
-                    headers: res.headers,
-                    body: Buffer.from(responseBody).toString('base64')
+                    data: {
+                        id: id,
+                        status: res.statusCode,
+                        statusText: res.statusMessage,
+                        headers: res.headers,
+                        body: Buffer.from(responseBody).toString('base64')
+                    }
                 };
                 
                 if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                     this.ws.send(JSON.stringify(response));
-                    console.log(`[TunnelClient] Response sent: ${res.statusCode} ${method} ${url}`);
+                    console.log(`[TunnelClient] Response sent: ${res.statusCode} ${method} ${path}`);
                 } else {
-                    console.log(`[TunnelClient] WebSocket closed, cannot send response for ${method} ${url}`);
+                    console.log(`[TunnelClient] WebSocket closed, cannot send response for ${method} ${path}`);
                 }
             });
         });
@@ -138,26 +142,28 @@ class TunnelClient {
             
             const response = {
                 type: 'http-response',
-                requestId: requestId,
-                status: 502,
-                statusText: 'Bad Gateway',
-                headers: { 'Content-Type': 'application/json' },
-                body: Buffer.from(JSON.stringify({ 
-                    error: 'Local server error',
-                    message: err.message 
-                })).toString('base64')
+                data: {
+                    id: id,
+                    status: 502,
+                    statusText: 'Bad Gateway',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: Buffer.from(JSON.stringify({ 
+                        error: 'Local server error',
+                        message: err.message 
+                    })).toString('base64')
+                }
             };
             
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 this.ws.send(JSON.stringify(response));
             } else {
-                console.log(`[TunnelClient] WebSocket closed, cannot send error response for ${method} ${url}`);
+                console.log(`[TunnelClient] WebSocket closed, cannot send error response for ${method} ${path}`);
             }
         });
 
         req.setTimeout(30000, () => {
             req.destroy();
-            console.error(`[TunnelClient] Request timeout for ${method} ${url}`);
+            console.error(`[TunnelClient] Request timeout for ${method} ${path}`);
         });
         
         // Send request body if present
