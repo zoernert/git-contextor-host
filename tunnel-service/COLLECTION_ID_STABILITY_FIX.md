@@ -133,10 +133,31 @@ curl -X POST "http://10.0.0.14:5000/api/qdrant/collections/test-collection/point
 # Returns: {"error":"Internal server error"}
 ```
 
-### � **Currently Testing**
-- **Proxy Middleware Fix**: Deployed improved error handling and Qdrant client integration
-- **Vector Operations**: Testing upsert operations with proper method signatures
-- **Error Reporting**: Enhanced debugging to identify specific Qdrant client issues
+### 📊 **Latest Test Results**
+
+```bash
+# ✅ Proxy route responds (no timeouts)
+# ✅ UUID identifier works  
+# ✅ Collection name identifier works
+# ✅ Better error reporting shows Qdrant client errors
+
+$ ./test-upsert.sh
+Testing upsert with UUID identifier...
+{"error":"Failed to process request","qdrantError":"Error: Bad Request"}
+
+Testing upsert with collection name identifier...
+{"error":"Failed to process request","qdrantError":"Error: Bad Request"}
+```
+
+The "Bad Request" error from Qdrant suggests the request format or vector data may be incorrect.
+
+### 🔍 **Current Investigation**
+- **Issue**: Qdrant client returning "Bad Request" for vector upsert operations
+- **Likely causes**: 
+  1. Vector data format mismatch
+  2. Collection name mapping issue in proxy middleware
+  3. API endpoint format not matching Qdrant expectations
+- **Next steps**: Debug the exact request being sent to Qdrant
 
 ### 📋 **Next Steps**
 1. **Test fixed proxy middleware** - Verify vector operations work after deployment

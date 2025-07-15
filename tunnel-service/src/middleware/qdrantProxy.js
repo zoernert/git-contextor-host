@@ -150,11 +150,22 @@ class QdrantProxyMiddleware {
                         console.log(`[QdrantProxy] Request body:`, JSON.stringify(req.body, null, 2));
                         
                         try {
-                            // Use the correct upsert method signature from QdrantClient
-                            result = await this.qdrantClient.upsert(internalCollectionName, {
-                                wait: req.body.wait || true,
+                            // The @qdrant/js-client-rest expects the body structure with wait as query param
+                            const upsertData = {
                                 points: req.body.points || []
-                            });
+                            };
+                            
+                            // Add wait parameter if specified
+                            const options = {};
+                            if (req.body.wait !== undefined) {
+                                options.wait = req.body.wait;
+                            }
+                            
+                            console.log(`[QdrantProxy] Upsert data:`, upsertData);
+                            console.log(`[QdrantProxy] Upsert options:`, options);
+                            
+                            // Use the correct method signature: upsert(collection_name, body, options)
+                            result = await this.qdrantClient.upsert(internalCollectionName, upsertData, options);
                             console.log(`[QdrantProxy] Upsert successful:`, result);
                         } catch (error) {
                             console.error(`[QdrantProxy] Upsert error:`, error);
