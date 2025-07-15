@@ -189,10 +189,12 @@ app.use('/api/tunnels', require('./routes/tunnels'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/admin', require('./routes/admin'));
 
-// Mount Qdrant proxy for collection-specific operations BEFORE the main qdrant routes
-app.use('/api/qdrant/collections/:collectionId/*', qdrantProxy.proxyRequest.bind(qdrantProxy));
-
+// Mount the main qdrant routes FIRST (includes collection info endpoint)
 app.use('/api/qdrant', require('./routes/qdrant'));
+
+// Mount Qdrant proxy for collection-specific operations AFTER the main routes
+// This catches collection operations like /collections/{id}/points/upsert
+app.use('/api/qdrant/collections/:collectionId/*', qdrantProxy.proxyRequest.bind(qdrantProxy));
 
 app.use('/api/meta-search', require('./routes/metaSearch'));
 

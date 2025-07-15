@@ -287,4 +287,53 @@ router.delete('/collections/:identifier', auth, async (req, res) => {
     }
 });
 
+// @route   GET api/qdrant/collections/:identifier
+// @desc    Get specific collection info by UUID, name, or ObjectId
+// @access  Private
+router.get('/collections/:identifier', auth, async (req, res) => {
+    try {
+        const { identifier } = req.params;
+        
+        // Find the collection using the flexible identifier lookup
+        const collection = await QdrantCollection.findByIdentifier(identifier, req.user.id);
+        
+        if (!collection) {
+            return res.status(404).json({ error: 'Collection not found or access denied' });
+        }
+        
+        // Get additional collection info from Qdrant if available
+        let qdrantInfo = null;
+        try {
+            const qdrantService = new QdrantService();
+            if (qdrantService.client) {
+                qdrantInfo = await qdrantService.client.getCollection(collection.collectionName);
+            }
+        } catch (error) {
+            console.log('Could not fetch Qdrant info:', error.message);
+        }
+        
+        // Enhance collection data with stable identifiers and Qdrant info
+        const collectionData = collection.toObject();
+        collectionData.identifier = collection.uuid; // Stable identifier
+        collectionData.url = collection.apiUrl; // Use the virtual URL
+        
+        // Add Qdrant collection info if available
+        if (qdrantInfo) {
+            collectionData.qdrantInfo = {
+                status: qdrantInfo.status,
+                vectorsCount: qdrantInfo.vectors_count || 0,
+                indexedVectorsCount: qdrantInfo.indexed_vectors_count || 0,
+                pointsCount: qdrantInfo.points_count || 0,
+                segmentsCount: qdrantInfo.segments_count || 0,
+                config: qdrantInfo.config
+            };
+        }
+        
+        res.json(collectionData);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).json({ error: 'Server Error' });
+    }
+});
+
 module.exports = router;

@@ -150,22 +150,16 @@ class QdrantProxyMiddleware {
                         console.log(`[QdrantProxy] Request body:`, JSON.stringify(req.body, null, 2));
                         
                         try {
-                            // The @qdrant/js-client-rest expects the body structure with wait as query param
-                            const upsertData = {
+                            // According to Qdrant REST API, upsert should be a PUT request to /collections/{collection}/points
+                            // The body should contain the points array directly
+                            const upsertBody = {
                                 points: req.body.points || []
                             };
                             
-                            // Add wait parameter if specified
-                            const options = {};
-                            if (req.body.wait !== undefined) {
-                                options.wait = req.body.wait;
-                            }
+                            console.log(`[QdrantProxy] Upsert body:`, JSON.stringify(upsertBody, null, 2));
                             
-                            console.log(`[QdrantProxy] Upsert data:`, upsertData);
-                            console.log(`[QdrantProxy] Upsert options:`, options);
-                            
-                            // Use the correct method signature: upsert(collection_name, body, options)
-                            result = await this.qdrantClient.upsert(internalCollectionName, upsertData, options);
+                            // Try the upsert method with just the collection name and body
+                            result = await this.qdrantClient.upsert(internalCollectionName, upsertBody);
                             console.log(`[QdrantProxy] Upsert successful:`, result);
                         } catch (error) {
                             console.error(`[QdrantProxy] Upsert error:`, error);
@@ -173,7 +167,9 @@ class QdrantProxyMiddleware {
                                 name: error.name,
                                 message: error.message,
                                 stack: error.stack?.split('\n').slice(0, 3).join('\n'),
-                                response: error.response?.data
+                                response: error.response?.data,
+                                status: error.response?.status,
+                                statusText: error.response?.statusText
                             });
                             throw error;
                         }

@@ -214,3 +214,69 @@ const url = 'https://tunnel.corrently.cloud/api/qdrant/collections/{mongodb-obje
 4. **Consider deprecating ObjectId usage** in future versions
 
 This solution completely addresses the collection ID stability issue while maintaining backward compatibility.
+
+## FINAL RESOLUTION ✅
+
+**Issue**: Qdrant "Bad Request" errors during upsert operations
+**Root Cause**: Point IDs must be UUIDs or unsigned integers, not arbitrary strings
+**Solution**: Generate proper UUID point IDs in client applications
+
+⚠️ **CRITICAL SECURITY REQUIREMENT**: All Qdrant access MUST go through our proxy service at `tunnel.corrently.cloud`. Direct access to the Qdrant server is prohibited for security and user isolation.
+
+### Security Model
+
+- ✅ **Proxy-Only Access**: All requests go through `https://tunnel.corrently.cloud/api/qdrant/...`
+- ✅ **User Isolation**: Users only access their own collections (enforced by middleware)
+- ✅ **Authentication**: API key validation for every request
+- ✅ **Internal Server Protection**: Qdrant server IP and credentials never exposed
+- ❌ **No Direct Access**: Direct Qdrant server access is not allowed
+
+### Point ID Format Requirements
+
+Qdrant accepts only these point ID formats:
+- **UUID strings**: `"550e8400-e29b-41d4-a716-446655440000"`
+- **Unsigned integers**: `1`, `2`, `3`, etc.
+- **❌ NOT arbitrary strings**: `"test-point-1"`, `"my-document"`, etc.
+
+### Working Examples
+
+```bash
+# ✅ Valid UUID point ID
+{
+  "points": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "vector": [0.1, 0.2, ...],
+      "payload": {"content": "test"}
+    }
+  ]
+}
+
+# ✅ Valid integer point ID
+{
+  "points": [
+    {
+      "id": 12345,
+      "vector": [0.1, 0.2, ...],
+      "payload": {"content": "test"}
+    }
+  ]
+}
+```
+
+### Final Test Results
+
+✅ **Proxy Test (UUID)**: `POST /api/qdrant/collections/{uuid}/points/upsert` via tunnel.corrently.cloud - SUCCESS  
+✅ **Proxy Test (Name)**: `POST /api/qdrant/collections/{name}/points/upsert` via tunnel.corrently.cloud - SUCCESS
+✅ **User Isolation**: Each user only sees their own collections - ENFORCED
+✅ **Authentication**: API key validation working - SECURED
+
+### Client Integration Notes
+
+When integrating with the managed Qdrant API:
+1. **Generate UUID point IDs**: Use `uuid.uuid4()` or equivalent
+2. **Use correct endpoints**: `POST /api/qdrant/collections/{identifier}/points/upsert`
+3. **Support both identifiers**: Collection UUID or collection name
+4. **Handle authentication**: Use `Api-Key` header or `Authorization: Bearer`
+
+All proxy middleware operations now work correctly with stable collection identifiers!
