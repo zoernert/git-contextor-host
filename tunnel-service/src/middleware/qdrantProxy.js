@@ -146,11 +146,26 @@ class QdrantProxyMiddleware {
                         result = await this.qdrantClient.search(internalCollectionName, req.body);
                     } else if (qdrantPath.includes('/points/upsert')) {
                         // Fix: Use correct upsert method signature
-                        console.log(`[QdrantProxy] Upserting ${req.body.points?.length || 0} points`);
-                        result = await this.qdrantClient.upsert(internalCollectionName, {
-                            wait: req.body.wait,
-                            points: req.body.points
-                        });
+                        console.log(`[QdrantProxy] Upserting ${req.body.points?.length || 0} points to collection: ${internalCollectionName}`);
+                        console.log(`[QdrantProxy] Request body:`, JSON.stringify(req.body, null, 2));
+                        
+                        try {
+                            // Use the correct upsert method signature from QdrantClient
+                            result = await this.qdrantClient.upsert(internalCollectionName, {
+                                wait: req.body.wait || true,
+                                points: req.body.points || []
+                            });
+                            console.log(`[QdrantProxy] Upsert successful:`, result);
+                        } catch (error) {
+                            console.error(`[QdrantProxy] Upsert error:`, error);
+                            console.error(`[QdrantProxy] Error details:`, {
+                                name: error.name,
+                                message: error.message,
+                                stack: error.stack?.split('\n').slice(0, 3).join('\n'),
+                                response: error.response?.data
+                            });
+                            throw error;
+                        }
                     } else if (qdrantPath.includes('/points')) {
                         result = await this.qdrantClient.upsert(internalCollectionName, req.body);
                     }
@@ -178,7 +193,8 @@ class QdrantProxyMiddleware {
             });
             res.status(500).json({ 
                 error: 'Failed to process request',
-                details: process.env.NODE_ENV === 'development' ? error.message : undefined
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined,
+                qdrantError: error.response?.data || error.toString()
             });
         }
     }
