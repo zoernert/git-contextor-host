@@ -315,9 +315,8 @@ router.get('/collections/:identifier', auth, async (req, res) => {
         // Get additional collection info from Qdrant if available
         let qdrantInfo = null;
         try {
-            const qdrantService = new QdrantService();
-            if (qdrantService.client) {
-                qdrantInfo = await qdrantService.client.getCollection(collection.collectionName);
+            if (QdrantService.client) {
+                qdrantInfo = await QdrantService.client.getCollection(collection.collectionName);
             }
         } catch (error) {
             console.log('Could not fetch Qdrant info:', error.message);
