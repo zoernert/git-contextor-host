@@ -37,35 +37,55 @@ class QdrantProxyMiddleware {
      */
     async proxyRequest(req, res, next) {
         try {
+            console.log(`[QdrantProxy] Processing request: ${req.method} ${req.path}`);
+            
             // Extract collection identifier from path (supports UUID, name, or ObjectId)
             const collectionIdentifier = req.params.collectionId;
             if (!collectionIdentifier) {
+                console.log('[QdrantProxy] Missing collection identifier');
                 return res.status(400).json({ error: 'Collection identifier is required' });
             }
+            console.log(`[QdrantProxy] Collection identifier: ${collectionIdentifier}`);
 
             // Get API key from header
             const apiKey = req.headers['api-key'] || req.headers['authorization']?.replace('Bearer ', '');
             if (!apiKey) {
+                console.log('[QdrantProxy] Missing API key');
                 return res.status(401).json({ error: 'API key is required' });
             }
 
-            // Authenticate user
-            const { user } = await this.authenticateUser(apiKey);
+            // Authenticate user with timeout
+            console.log('[QdrantProxy] Authenticating user...');
+            const { user } = await Promise.race([
+                this.authenticateUser(apiKey),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Authentication timeout')), 5000))
+            ]);
+            console.log(`[QdrantProxy] User authenticated: ${user._id}`);
             
             // Find the specific collection by identifier (UUID, name, or ObjectId)
-            const collection = await QdrantCollection.findByIdentifier(collectionIdentifier, user._id);
+            console.log('[QdrantProxy] Looking up collection...');
+            const collection = await Promise.race([
+                QdrantCollection.findByIdentifier(collectionIdentifier, user._id),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Collection lookup timeout')), 5000))
+            ]);
+            
             if (!collection) {
+                console.log('[QdrantProxy] Collection not found');
                 return res.status(404).json({ error: 'Collection not found or access denied' });
             }
+            console.log(`[QdrantProxy] Collection found: ${collection.name} (${collection.uuid})`);
 
             // Handle different API paths
             const apiPath = req.params[0] || '';
+            console.log(`[QdrantProxy] API path: ${apiPath}`);
             
             if (this.actualQdrantClient) {
                 // Forward to actual Qdrant service
+                console.log('[QdrantProxy] Forwarding to actual Qdrant...');
                 await this.forwardToQdrant(req, res, collection, apiPath);
             } else {
                 // Mock mode
+                console.log('[QdrantProxy] Using mock mode');
                 res.json({ 
                     status: 'ok', 
                     mode: 'mock',
@@ -74,7 +94,10 @@ class QdrantProxyMiddleware {
                 });
             }
         } catch (error) {
-            console.error('Qdrant proxy error:', error);
+            console.error('[QdrantProxy] Error:', error.message);
+            if (error.message.includes('timeout')) {
+                return res.status(504).json({ error: 'Request timeout' });
+            }
             res.status(500).json({ error: 'Internal server error' });
         }
     }
@@ -112,6 +135,12 @@ class QdrantProxyMiddleware {
                 case 'post':
                     if (qdrantPath.includes('/points/search')) {
                         result = await this.actualQdrantClient.search(internalCollectionName, req.body);
+                    } else if (qdrantPath.includes('/points/upsert')) {
+                        // Fix: Use correct upsert method signature
+                        result = await this.actualQdrantClient.upsert(internalCollectionName, {
+                            wait: req.body.wait,
+                            points: req.body.points
+                        });
                     } else if (qdrantPath.includes('/points')) {
                         result = await this.actualQdrantClient.upsert(internalCollectionName, req.body);
                     }
@@ -131,7 +160,16 @@ class QdrantProxyMiddleware {
             res.json(result);
         } catch (error) {
             console.error('Qdrant forwarding error:', error);
-            res.status(500).json({ error: 'Failed to process request' });
+            console.error('Request details:', {
+                method: req.method,
+                path: apiPath,
+                collection: collection.collectionName,
+                bodyKeys: Object.keys(req.body || {})
+            });
+            res.status(500).json({ 
+                error: 'Failed to process request',
+                details: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
         }
     }
 }

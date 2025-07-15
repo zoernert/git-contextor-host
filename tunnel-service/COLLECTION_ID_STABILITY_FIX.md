@@ -56,6 +56,48 @@ Collection listing now includes:
 - **Fix**: Moved the proxy route before the main routes in `src/index.js`
 - **Impact**: Proxy endpoints now work correctly without conflicts
 
+## Current Testing Status
+
+### ✅ **Working Features**
+- **Collection Creation**: Successfully creates collections with UUIDs
+- **API Key Authentication**: Both `Api-Key` and `Authorization: Bearer` headers work
+- **Collection Listing**: Returns empty array when no collections exist
+- **UUID Generation**: Collections get stable UUIDs on creation
+- **Connection Endpoints**: All identifier types work for `/connection` endpoint
+- **Proxy Route Routing**: Proxy middleware is responding (not timing out)
+- **Flexible Identifiers**: UUID, name, and ObjectId all route correctly
+
+### ❌ **Issues Found**
+- **Vector Upsert Operations**: All vector operations fail with "Failed to process request"
+- **Qdrant Client Error**: The middleware's Qdrant client integration has issues
+- **Error Handling**: Need better error reporting from the middleware
+
+### 🧪 **Test Results**
+```bash
+# ✅ Authentication works
+curl -X GET "https://tunnel.corrently.cloud/api/qdrant/collections" \
+  -H "Api-Key: b6403676-186a-4d2b-8983-545b27e6c99e"
+# Returns: []
+
+# ✅ Collection creation works with UUID
+curl -X POST "https://tunnel.corrently.cloud/api/qdrant/collections"
+# Returns: {"uuid":"ca9536d1-3d21-475a-aa4e-c108a676e101",...}
+
+# ✅ Connection endpoint works with all identifiers
+curl -X GET "https://tunnel.corrently.cloud/api/qdrant/collections/test-collection/connection"
+# Returns: Qdrant collection info
+
+# ✅ Proxy routing works but operations fail
+curl -X POST "https://tunnel.corrently.cloud/api/qdrant/collections/ca9536d1-3d21-475a-aa4e-c108a676e101/collections/test-collection/points/upsert"
+# Returns: {"error":"Failed to process request"}
+```
+
+### 📋 **Next Steps**
+1. **Debug proxy middleware** - Check for timeout issues
+2. **Test connection endpoints** - Verify routing works correctly
+3. **Validate all identifier types** - UUID, name, and ObjectId
+4. **Performance optimization** - Ensure middleware doesn't cause delays
+
 ## Files Modified
 
 ### Core Model Changes
