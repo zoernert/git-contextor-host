@@ -24,7 +24,33 @@ class QdrantService {
             vectors: {
                 size: 1536, // Default for OpenAI text-embedding-ada-002
                 distance: 'Cosine',
+                on_disk: true, // Store vectors on disk to save memory
             },
+            // Enable on-disk payload storage for larger payloads
+            on_disk_payload: true,
+            // Optimize for larger payloads and better memory usage
+            hnsw_config: {
+                m: 16,
+                ef_construct: 100,
+                full_scan_threshold: 10000,
+                max_indexing_threads: 0,
+                on_disk: true // Store HNSW index on disk
+            },
+            optimizer_config: {
+                deleted_threshold: 0.2,
+                vacuum_min_vector_number: 1000,
+                default_segment_number: 0,
+                max_segment_size: null,
+                memmap_threshold: null,
+                indexing_threshold: 20000,
+                flush_interval_sec: 50,
+                max_optimization_threads: null
+            },
+            // WAL configuration for better write performance
+            wal_config: {
+                wal_capacity_mb: 32,
+                wal_segments_ahead: 0
+            }
         };
 
         const collectionConfig = { ...defaultConfig, ...config };

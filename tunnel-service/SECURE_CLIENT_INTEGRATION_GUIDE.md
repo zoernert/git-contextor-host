@@ -52,7 +52,14 @@ const upsertData = {
         {
             id: "550e8400-e29b-41d4-a716-446655440000",  // UUID required
             vector: [0.1, 0.2, 0.3, ...],               // Your vector data
-            payload: { content: "Your data" }           // Optional metadata
+            payload: {                                   // Payload best practices:
+                content: "Your content here",           // Keep < 10KB for optimal performance
+                metadata: {                             // Use structured data
+                    title: "Document Title",
+                    category: "documentation",
+                    created_at: "2025-07-15T00:00:00Z"
+                }
+            }
         }
     ]
 };
@@ -62,6 +69,35 @@ const result = await fetch('https://tunnel.corrently.cloud/api/qdrant/collection
     headers: headers,
     body: JSON.stringify(upsertData)
 });
+```
+
+#### 📏 Payload Size Guidelines
+- **✅ Optimal**: < 10KB per payload
+- **⚠️ Acceptable**: 10KB - 100KB (may impact performance)
+- **❌ Avoid**: > 100KB (use external storage + references)
+
+For large content, consider chunking:
+```javascript
+// Large content chunking strategy
+const chunkContent = (content, chunkSize = 8192) => {
+    const chunks = [];
+    for (let i = 0; i < content.length; i += chunkSize) {
+        chunks.push(content.slice(i, i + chunkSize));
+    }
+    return chunks;
+};
+
+const chunks = chunkContent(largeContent);
+const points = chunks.map((chunk, index) => ({
+    id: `${documentId}-chunk-${index}`,
+    vector: generateEmbedding(chunk),
+    payload: {
+        content: chunk,
+        document_id: documentId,
+        chunk_index: index,
+        total_chunks: chunks.length
+    }
+}));
 ```
 
 ### 4. Search Operations

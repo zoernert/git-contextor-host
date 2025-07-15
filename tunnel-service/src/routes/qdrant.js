@@ -55,12 +55,23 @@ router.post('/collections', auth, async (req, res) => {
 
         const qdrantCollectionName = `user-${req.user.id}-${name}`;
         
-        // Create collection in Qdrant
+        // Create collection in Qdrant with optimized configuration for larger payloads
         await QdrantService.createCollection(qdrantCollectionName, {
             vectors: {
                 size: vectorSize,
                 distance: distance,
+                on_disk: true, // Store vectors on disk to save memory
             },
+            // Enable on-disk payload storage for larger payloads
+            on_disk_payload: true,
+            // Optimize for larger payloads and better memory usage
+            hnsw_config: {
+                m: 16,
+                ef_construct: 100,
+                full_scan_threshold: 10000,
+                max_indexing_threads: 0,
+                on_disk: true // Store HNSW index on disk
+            }
         });
 
         let credentials = {};
