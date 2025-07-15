@@ -24,12 +24,18 @@ Based on the analysis of the tunnel.corrently.cloud codebase, here are comprehen
 - Proxy endpoints missing: `/api/qdrant/collections/{collection_id}/*` (should be handled by qdrantProxy middleware)
 
 **The correct endpoints should be:**
+- `/api/qdrant/collections/{uuid}/collections/{collection_name}/points/upsert` ✅ **RECOMMENDED**
+- `/api/qdrant/collections/{collection_name}/collections/{collection_name}/points/search` ✅ **RECOMMENDED**
+- `/api/qdrant/collections/{uuid}/collections/{collection_name}/points/delete` ✅ **RECOMMENDED**
+
+**Alternative legacy endpoints (still supported):**
 - `/api/qdrant/collections/{collection_id}/collections/{collection_name}/points/upsert`
 - `/api/qdrant/collections/{collection_id}/collections/{collection_name}/points/search`
 - `/api/qdrant/collections/{collection_id}/collections/{collection_name}/points/delete`
 
 **Fix Required:** Add this route to `/tunnel-service/src/index.js`:
 ```javascript
+// Support flexible collection identifiers (UUID, name, or ObjectId)
 app.use('/api/qdrant/collections/:collectionId/*', qdrantProxy.proxyRequest.bind(qdrantProxy));
 ```
 
@@ -39,7 +45,9 @@ app.use('/api/qdrant/collections/:collectionId/*', qdrantProxy.proxyRequest.bind
 
 **ANSWER:** The connection URL should work with standard Qdrant client once the proxy route is fixed.
 
-- **URL Format:** `https://tunnel.corrently.cloud/api/qdrant/collections/{collection_id}`
+- **URL Format:** `https://tunnel.corrently.cloud/api/qdrant/collections/{uuid}` ✅ **RECOMMENDED**
+- **Alternative:** `https://tunnel.corrently.cloud/api/qdrant/collections/{collection-name}` ✅ **RECOMMENDED**
+- **Legacy:** `https://tunnel.corrently.cloud/api/qdrant/collections/{collection_id}` ✅ **STILL SUPPORTED**
 - **IP Resolution:** The IP `85.25.197.105:6333` suggests the client is trying to resolve the hostname directly instead of using the proxy
 - **Standard Client:** Yes, `@qdrant/js-client-rest` should work directly with the managed API
 
@@ -47,8 +55,15 @@ app.use('/api/qdrant/collections/:collectionId/*', qdrantProxy.proxyRequest.bind
 ```javascript
 const { QdrantClient } = require('@qdrant/js-client-rest');
 
+// RECOMMENDED: Use stable UUID
 const client = new QdrantClient({
-    url: 'https://tunnel.corrently.cloud/api/qdrant/collections/{collection_id}',
+    url: 'https://tunnel.corrently.cloud/api/qdrant/collections/{uuid}',
+    apiKey: 'your-api-key'
+});
+
+// ALTERNATIVE: Use collection name
+const client = new QdrantClient({
+    url: 'https://tunnel.corrently.cloud/api/qdrant/collections/{collection-name}',
     apiKey: 'your-api-key'
 });
 ```
@@ -70,15 +85,15 @@ const client = new QdrantClient({
 **Management Endpoints:**
 - `GET /api/qdrant/collections` - List user's collections
 - `POST /api/qdrant/collections` - Create new collection
-- `GET /api/qdrant/collections/{id}/connection` - Get connection info
-- `POST /api/qdrant/collections/{id}/test-connection` - Test connection
-- `DELETE /api/qdrant/collections/{id}` - Delete collection
+- `GET /api/qdrant/collections/{uuid|name|id}/connection` - Get connection info ✅ **FLEXIBLE**
+- `POST /api/qdrant/collections/{uuid|name|id}/test-connection` - Test connection ✅ **FLEXIBLE**
+- `DELETE /api/qdrant/collections/{uuid|name|id}` - Delete collection ✅ **FLEXIBLE**
 
 **Qdrant Operation Endpoints (proxied):**
-- `POST /api/qdrant/collections/{id}/collections/{name}/points/upsert` - Add vectors
-- `POST /api/qdrant/collections/{id}/collections/{name}/points/search` - Search vectors
-- `POST /api/qdrant/collections/{id}/collections/{name}/points/delete` - Delete vectors
-- `GET /api/qdrant/collections/{id}/collections/{name}` - Get collection info
+- `POST /api/qdrant/collections/{uuid|name|id}/collections/{name}/points/upsert` - Add vectors ✅ **FLEXIBLE**
+- `POST /api/qdrant/collections/{uuid|name|id}/collections/{name}/points/search` - Search vectors ✅ **FLEXIBLE**
+- `POST /api/qdrant/collections/{uuid|name|id}/collections/{name}/points/delete` - Delete vectors ✅ **FLEXIBLE**
+- `GET /api/qdrant/collections/{uuid|name|id}/collections/{name}` - Get collection info ✅ **FLEXIBLE**
 
 **Limits & Recommendations:**
 - **Batch size:** No hard limit set in code, but recommend 100-1000 vectors per upsert
@@ -118,8 +133,15 @@ const client = new QdrantClient({
 ```javascript
 const { QdrantClient } = require('@qdrant/js-client-rest');
 
+// RECOMMENDED: Use stable UUID
 const client = new QdrantClient({
-    url: 'https://tunnel.corrently.cloud/api/qdrant/collections/{collection_id}',
+    url: 'https://tunnel.corrently.cloud/api/qdrant/collections/{uuid}',
+    apiKey: 'your-api-key'
+});
+
+// ALTERNATIVE: Use collection name
+const client = new QdrantClient({
+    url: 'https://tunnel.corrently.cloud/api/qdrant/collections/{collection-name}',
     apiKey: 'your-api-key'
 });
 
@@ -162,9 +184,18 @@ await client.upsert('my-collection', { points: [...] });
 
 ### 9. **Testing Endpoints**
 
-**ANSWER:** Use the test connection endpoint:
+**ANSWER:** Use the test connection endpoint with flexible identifiers:
 
 ```bash
+# Using UUID (RECOMMENDED)
+curl -X POST "https://tunnel.corrently.cloud/api/qdrant/collections/{uuid}/test-connection" \
+  -H "Api-Key: your-api-key"
+
+# Using collection name (RECOMMENDED)
+curl -X POST "https://tunnel.corrently.cloud/api/qdrant/collections/{collection-name}/test-connection" \
+  -H "Api-Key: your-api-key"
+
+# Using ObjectId (legacy support)
 curl -X POST "https://tunnel.corrently.cloud/api/qdrant/collections/{collection_id}/test-connection" \
   -H "Api-Key: your-api-key"
 ```
@@ -190,19 +221,28 @@ curl -X POST "https://tunnel.corrently.cloud/api/qdrant/collections/{collection_
 
 ### 10. **Collection Management**
 
-**ANSWER:** Collection persistence and management:
+**ANSWER:** Collection persistence and management with stable identifiers:
 
 **Collection ID Stability:**
-- Collection IDs are MongoDB ObjectIds - they don't change
-- If IDs appear to change, check if collections are being recreated
+- ✅ **FIXED:** Collections now have stable UUID identifiers that never change
+- Each collection gets a permanent UUID on creation (e.g., `550e8400-e29b-41d4-a716-446655440000`)
+- MongoDB ObjectIds are still used internally but not exposed as primary identifiers
+- **The API now supports lookup by UUID, collection name, or ObjectId (for backward compatibility)**
+
+**API Access Methods:**
+- **By UUID:** `/api/qdrant/collections/{uuid}/connection` ✅ **RECOMMENDED**
+- **By Name:** `/api/qdrant/collections/{collection-name}/connection` ✅ **RECOMMENDED**
+- **By ObjectId:** `/api/qdrant/collections/{mongodb-id}/connection` ✅ **LEGACY SUPPORT**
 
 **Persistence:**
 - Collections persist until manually deleted
 - No automatic cleanup unless user is deleted
-- Marked as `isActive: false` when soft-deleted
+- UUIDs remain stable across database migrations and development environments
 
 **Lifecycle:**
-- Created via management API
-- Accessed via proxy API
+- Created via management API (gets automatic UUID)
+- Accessed via proxy API using UUID or name
 - Deleted via management API (also removes from Qdrant)
+
+**Migration:** Existing collections without UUIDs will be automatically assigned stable UUIDs via migration script.
 ````

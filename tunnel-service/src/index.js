@@ -188,10 +188,11 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/tunnels', require('./routes/tunnels'));
 app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/admin', require('./routes/admin'));
-app.use('/api/qdrant', require('./routes/qdrant'));
 
-// Mount Qdrant proxy for collection-specific operations
+// Mount Qdrant proxy for collection-specific operations BEFORE the main qdrant routes
 app.use('/api/qdrant/collections/:collectionId/*', qdrantProxy.proxyRequest.bind(qdrantProxy));
+
+app.use('/api/qdrant', require('./routes/qdrant'));
 
 app.use('/api/meta-search', require('./routes/metaSearch'));
 

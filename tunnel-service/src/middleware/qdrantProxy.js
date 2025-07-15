@@ -37,10 +37,10 @@ class QdrantProxyMiddleware {
      */
     async proxyRequest(req, res, next) {
         try {
-            // Extract collection ID from path
-            const collectionId = req.params.collectionId;
-            if (!collectionId) {
-                return res.status(400).json({ error: 'Collection ID is required' });
+            // Extract collection identifier from path (supports UUID, name, or ObjectId)
+            const collectionIdentifier = req.params.collectionId;
+            if (!collectionIdentifier) {
+                return res.status(400).json({ error: 'Collection identifier is required' });
             }
 
             // Get API key from header
@@ -49,11 +49,11 @@ class QdrantProxyMiddleware {
                 return res.status(401).json({ error: 'API key is required' });
             }
 
-            // Authenticate user and get their collections
-            const { user, collections } = await this.authenticateUser(apiKey);
+            // Authenticate user
+            const { user } = await this.authenticateUser(apiKey);
             
-            // Find the specific collection
-            const collection = collections.find(c => c._id.toString() === collectionId);
+            // Find the specific collection by identifier (UUID, name, or ObjectId)
+            const collection = await QdrantCollection.findByIdentifier(collectionIdentifier, user._id);
             if (!collection) {
                 return res.status(404).json({ error: 'Collection not found or access denied' });
             }

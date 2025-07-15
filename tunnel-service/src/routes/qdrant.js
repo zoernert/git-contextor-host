@@ -12,7 +12,16 @@ const plansConfig = require('../config/plans');
 router.get('/collections', auth, async (req, res) => {
     try {
         const collections = await QdrantCollection.find({ userId: req.user.id, isActive: true });
-        res.json(collections);
+        
+        // Enhance collection data with stable identifiers
+        const enhancedCollections = collections.map(collection => {
+            const collectionData = collection.toObject();
+            collectionData.identifier = collection.uuid; // Stable identifier
+            collectionData.url = collection.apiUrl; // Use the virtual URL
+            return collectionData;
+        });
+        
+        res.json(enhancedCollections);
     } catch (err) {
         console.error(err.message);
         res.status(500).send('Server Error');
@@ -91,21 +100,17 @@ router.post('/collections', auth, async (req, res) => {
     }
 });
 
-// @route   GET api/qdrant/collections/:id/connection
-// @desc    Get connection information for a collection
+// @route   GET api/qdrant/collections/:identifier/connection
+// @desc    Get connection information for a collection (supports UUID, name, or ObjectId)
 // @access  Private
-router.get('/collections/:id/connection', auth, async (req, res) => {
+router.get('/collections/:identifier/connection', auth, async (req, res) => {
     try {
-        const collectionId = req.params.id;
-        if (!collectionId) {
-            return res.status(400).json({ msg: 'Collection ID is required' });
+        const identifier = req.params.identifier;
+        if (!identifier) {
+            return res.status(400).json({ msg: 'Collection identifier is required' });
         }
 
-        const collection = await QdrantCollection.findOne({ 
-            _id: collectionId, 
-            userId: req.user.id, 
-            isActive: true 
-        });
+        const collection = await QdrantCollection.findByIdentifier(identifier, req.user.id);
 
         if (!collection) {
             return res.status(404).json({ msg: 'Collection not found' });
@@ -118,10 +123,11 @@ router.get('/collections/:id/connection', auth, async (req, res) => {
         }
         
         const connectionInfo = {
-            url: `${process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud'}/api/qdrant/collections/${collection._id}`,
+            url: `${process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud'}/api/qdrant/collections/${collection.uuid}`,
             apiKey: user.apiKey,
             collectionName: collection.name,
-            internalCollectionName: collection.collectionName
+            internalCollectionName: collection.collectionName,
+            collectionId: collection.uuid  // Use UUID instead of ObjectId
         };
 
         // Provide connection examples
@@ -189,21 +195,17 @@ curl -X POST "${connectionInfo.url}/collections/${collection.name}/points/search
     }
 });
 
-// @route   POST api/qdrant/collections/:id/test-connection
-// @desc    Test connection to a collection
+// @route   POST api/qdrant/collections/:identifier/test-connection
+// @desc    Test connection to a collection (supports UUID, name, or ObjectId)
 // @access  Private
-router.post('/collections/:id/test-connection', auth, async (req, res) => {
+router.post('/collections/:identifier/test-connection', auth, async (req, res) => {
     try {
-        const collectionId = req.params.id;
-        if (!collectionId) {
-            return res.status(400).json({ msg: 'Collection ID is required' });
+        const identifier = req.params.identifier;
+        if (!identifier) {
+            return res.status(400).json({ msg: 'Collection identifier is required' });
         }
 
-        const collection = await QdrantCollection.findOne({ 
-            _id: collectionId, 
-            userId: req.user.id, 
-            isActive: true 
-        });
+        const collection = await QdrantCollection.findByIdentifier(identifier, req.user.id);
 
         if (!collection) {
             return res.status(404).json({ msg: 'Collection not found' });
@@ -235,21 +237,17 @@ router.post('/collections/:id/test-connection', auth, async (req, res) => {
     }
 });
 
-// @route   GET api/qdrant/collections/:id/usage
-// @desc    Get usage statistics for a collection
+// @route   GET api/qdrant/collections/:identifier/usage
+// @desc    Get usage statistics for a collection (supports UUID, name, or ObjectId)
 // @access  Private
-router.get('/collections/:id/usage', auth, async (req, res) => {
+router.get('/collections/:identifier/usage', auth, async (req, res) => {
     try {
-        const collectionId = req.params.id;
-        if (!collectionId) {
-            return res.status(400).json({ msg: 'Collection ID is required' });
+        const identifier = req.params.identifier;
+        if (!identifier) {
+            return res.status(400).json({ msg: 'Collection identifier is required' });
         }
 
-        const collection = await QdrantCollection.findOne({ 
-            _id: collectionId, 
-            userId: req.user.id, 
-            isActive: true 
-        });
+        const collection = await QdrantCollection.findByIdentifier(identifier, req.user.id);
 
         if (!collection) {
             return res.status(404).json({ msg: 'Collection not found' });
@@ -267,12 +265,12 @@ router.get('/collections/:id/usage', auth, async (req, res) => {
     }
 });
 
-// @route   DELETE api/qdrant/collections/:id
-// @desc    Delete a Qdrant collection
+// @route   DELETE api/qdrant/collections/:identifier
+// @desc    Delete a Qdrant collection (supports UUID, name, or ObjectId)
 // @access  Private
-router.delete('/collections/:id', auth, async (req, res) => {
+router.delete('/collections/:identifier', auth, async (req, res) => {
     try {
-        const collection = await QdrantCollection.findOne({ _id: req.params.id, userId: req.user.id });
+        const collection = await QdrantCollection.findByIdentifier(req.params.identifier, req.user.id, false);
         if (!collection) {
             return res.status(404).json({ msg: 'Collection not found or permission denied.' });
         }
@@ -281,7 +279,7 @@ router.delete('/collections/:id', auth, async (req, res) => {
         await QdrantService.deleteCollection(collection.collectionName);
         
         // Delete from database
-        await QdrantCollection.findByIdAndDelete(req.params.id);
+        await QdrantCollection.findByIdAndDelete(collection._id);
         
         res.json({ msg: 'Collection deleted' });
     } catch (err) {
