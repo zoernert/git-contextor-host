@@ -42,6 +42,20 @@ Collection listing now includes:
 - Backward compatibility maintained with ObjectId lookup
 - No breaking changes for existing clients
 
+## Issues Found and Fixed During Testing
+
+### 1. **Authentication Middleware Issue**
+- **Problem**: The authentication middleware only supported `Authorization: Bearer` header, not `Api-Key` header
+- **Fix**: Updated `src/middleware/auth.js` to support both header formats:
+  - `Authorization: Bearer {api-key}`
+  - `Api-Key: {api-key}`
+- **Impact**: Clients can now use either header format for API authentication
+
+### 2. **Route Order Issue**
+- **Problem**: The proxy route was placed after the main qdrant routes, causing conflicts
+- **Fix**: Moved the proxy route before the main routes in `src/index.js`
+- **Impact**: Proxy endpoints now work correctly without conflicts
+
 ## Files Modified
 
 ### Core Model Changes

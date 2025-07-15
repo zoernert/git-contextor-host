@@ -4,8 +4,20 @@ const User = require('../models/User');
 module.exports = async function (req, res, next) {
   // Check for API Key first (for client integrations like Git Contextor)
   const authHeader = req.header('Authorization');
+  const apiKeyHeader = req.header('Api-Key');
+  
+  let apiKey = null;
+  
+  // Check Authorization: Bearer format
   if (authHeader && authHeader.startsWith('Bearer ')) {
-      const apiKey = authHeader.substring(7, authHeader.length);
+      apiKey = authHeader.substring(7, authHeader.length);
+  }
+  // Check Api-Key header format  
+  else if (apiKeyHeader) {
+      apiKey = apiKeyHeader;
+  }
+  
+  if (apiKey) {
       try {
           const user = await User.findOne({ apiKey });
           if (!user) {
