@@ -5,10 +5,15 @@ const { QdrantClient } = require('@qdrant/js-client-rest');
 
 class QdrantProxyMiddleware {
     constructor() {
-        this.actualQdrantClient = QdrantService.mock ? null : new QdrantClient({
-            url: process.env.QDRANT_URL,
-            apiKey: process.env.QDRANT_API_KEY,
-        });
+        // Create direct Qdrant client for proxy operations
+        if (process.env.QDRANT_URL) {
+            this.qdrantClient = new QdrantClient({
+                url: process.env.QDRANT_URL,
+                apiKey: process.env.QDRANT_API_KEY,
+            });
+        } else {
+            this.qdrantClient = null; // Mock mode
+        }
     }
 
     /**
@@ -79,18 +84,19 @@ class QdrantProxyMiddleware {
             const apiPath = req.params[0] || '';
             console.log(`[QdrantProxy] API path: ${apiPath}`);
             
-            if (this.actualQdrantClient) {
+            if (this.qdrantClient) {
                 // Forward to actual Qdrant service
                 console.log('[QdrantProxy] Forwarding to actual Qdrant...');
                 await this.forwardToQdrant(req, res, collection, apiPath);
             } else {
                 // Mock mode
                 console.log('[QdrantProxy] Using mock mode');
-                res.json({ 
+                return res.json({ 
                     status: 'ok', 
                     mode: 'mock',
                     collection: collection.name,
-                    path: apiPath
+                    path: apiPath,
+                    message: 'Operation completed in mock mode'
                 });
             }
         } catch (error) {
@@ -122,35 +128,38 @@ class QdrantProxyMiddleware {
 
             // Execute the appropriate Qdrant client method
             let result;
+            console.log(`[QdrantProxy] Executing ${method.toUpperCase()} ${qdrantPath}`);
+            
             switch (method) {
                 case 'get':
                     if (qdrantPath.includes('/points/search')) {
-                        result = await this.actualQdrantClient.search(internalCollectionName, req.body || {});
+                        result = await this.qdrantClient.search(internalCollectionName, req.body || {});
                     } else if (qdrantPath.includes('/points')) {
-                        result = await this.actualQdrantClient.retrieve(internalCollectionName, req.body || {});
+                        result = await this.qdrantClient.retrieve(internalCollectionName, req.body || {});
                     } else {
-                        result = await this.actualQdrantClient.getCollection(internalCollectionName);
+                        result = await this.qdrantClient.getCollection(internalCollectionName);
                     }
                     break;
                 case 'post':
                     if (qdrantPath.includes('/points/search')) {
-                        result = await this.actualQdrantClient.search(internalCollectionName, req.body);
+                        result = await this.qdrantClient.search(internalCollectionName, req.body);
                     } else if (qdrantPath.includes('/points/upsert')) {
                         // Fix: Use correct upsert method signature
-                        result = await this.actualQdrantClient.upsert(internalCollectionName, {
+                        console.log(`[QdrantProxy] Upserting ${req.body.points?.length || 0} points`);
+                        result = await this.qdrantClient.upsert(internalCollectionName, {
                             wait: req.body.wait,
                             points: req.body.points
                         });
                     } else if (qdrantPath.includes('/points')) {
-                        result = await this.actualQdrantClient.upsert(internalCollectionName, req.body);
+                        result = await this.qdrantClient.upsert(internalCollectionName, req.body);
                     }
                     break;
                 case 'put':
-                    result = await this.actualQdrantClient.upsert(internalCollectionName, req.body);
+                    result = await this.qdrantClient.upsert(internalCollectionName, req.body);
                     break;
                 case 'delete':
                     if (qdrantPath.includes('/points')) {
-                        result = await this.actualQdrantClient.delete(internalCollectionName, req.body);
+                        result = await this.qdrantClient.delete(internalCollectionName, req.body);
                     }
                     break;
                 default:
