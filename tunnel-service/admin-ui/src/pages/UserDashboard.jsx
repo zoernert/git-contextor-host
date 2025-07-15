@@ -1,33 +1,21 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
+import api from '../services/api';
 
 const fetchUser = async () => {
-  const token = localStorage.getItem('token');
-  if (!token) throw new Error('No token found');
-  const { data } = await axios.get('/api/auth/me', {
-    headers: { 'x-auth-token': token },
-  });
-  return data;
+  const response = await api.get('/auth/me');
+  return response.data;
 };
 
 const fetchTunnels = async () => {
-  const token = localStorage.getItem('token');
-  if (!token) return [];
-  const { data } = await axios.get('/api/tunnels', {
-    headers: { 'x-auth-token': token },
-  });
-  return data;
+  const response = await api.get('/tunnels');
+  return response.data;
 };
 
 const fetchCollections = async () => {
-  const token = localStorage.getItem('token');
-  if (!token) return [];
-  const { data } = await axios.get('/api/qdrant/collections', {
-    headers: { 'x-auth-token': token },
-  });
-  return data;
+  const response = await api.get('/qdrant/collections');
+  return response.data;
 };
 
 export default function UserDashboard() {
@@ -50,22 +38,15 @@ export default function UserDashboard() {
     enabled: !!user, // only fetch collections if user is loaded
   });
 
-  const destroyTunnelMutation = useMutation(
-    (tunnelId) => {
-      const token = localStorage.getItem('token');
-      return axios.delete(`/api/tunnels/${tunnelId}`, {
-        headers: { 'x-auth-token': token },
-      });
+  const destroyTunnelMutation = useMutation({
+    mutationFn: (tunnelId) => api.delete(`/tunnels/${tunnelId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries(['tunnels']);
     },
-    {
-      onSuccess: () => {
-        queryClient.invalidateQueries(['tunnels']);
-      },
-      onError: (error) => {
-        alert('Failed to destroy tunnel: ' + (error.response?.data?.msg || 'Server error'));
-      }
+    onError: (error) => {
+      alert('Failed to destroy tunnel: ' + (error.response?.data?.msg || 'Server error'));
     }
-  );
+  });
 
   const handleDestroyTunnel = (tunnelId) => {
     if (window.confirm('Are you sure you want to destroy this tunnel?')) {
@@ -87,51 +68,25 @@ export default function UserDashboard() {
   };
 
   if (isLoadingUser) {
-    return <div className="p-8 text-center">Loading dashboard...</div>;
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
   if (isErrorUser) {
-    // This will trigger a re-render, and on next render will redirect
-    // because token is gone.
     localStorage.removeItem('token');
     navigate('/login');
     return null;
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <nav className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <h1 className="text-xl font-bold">My Dashboard</h1>
-              </div>
-            </div>
-            <div className="flex items-center">
-              <button
-                onClick={handleLogout}
-                className="bg-white p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <span className="sr-only">Log out</span>
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-              </button>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      <div className="py-10">
-        <header>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h1 className="text-3xl font-bold leading-tight text-gray-900">Welcome, {user.email}</h1>
-          </div>
+    <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
+      <div className="px-4 sm:px-0">
+        <header className="mb-8">
+          <h1 className="text-3xl font-bold leading-tight text-gray-900">Welcome, {user.email}</h1>
         </header>
-        <main>
-          <div className="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            <div className="px-4 py-8 sm:px-0">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                     <div className="lg:col-span-2">
                         <div className="bg-white shadow sm:rounded-lg">
@@ -334,9 +289,7 @@ export default function UserDashboard() {
                 </div>
 
             </div>
-          </div>
-        </main>
-      </div>
+        </div>
     </div>
   );
 }

@@ -190,6 +190,11 @@ app.use('/api/subscriptions', require('./routes/subscriptions'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/qdrant', require('./routes/qdrant'));
 
+// Mount Qdrant proxy for collection-specific operations
+app.use('/api/qdrant/collections/:collectionId/*', qdrantProxy.proxyRequest.bind(qdrantProxy));
+
+app.use('/api/meta-search', require('./routes/metaSearch'));
+
 // Serve static files from admin-ui/dist
 app.use(express.static(path.join(__dirname, '../admin-ui/dist')));
 
