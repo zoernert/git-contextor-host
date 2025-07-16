@@ -4,12 +4,14 @@ const SearchTemplate = require('../models/SearchTemplate');
 const SearchHistory = require('../models/SearchHistory');
 const QdrantCollection = require('../models/QdrantCollection');
 const Tunnel = require('../models/Tunnel');
+const EmbeddingProvider = require('./EmbeddingProvider');
 const { QdrantClient } = require('@qdrant/js-client-rest');
 const axios = require('axios');
 
 class MetaSearchService {
   constructor() {
     this.tokenCounter = new TokenCounter();
+    this.embeddingProvider = new EmbeddingProvider();
     this.maxConcurrentSearches = parseInt(process.env.MAX_META_SEARCH_SOURCES) || 20;
     this.cacheEnabled = process.env.META_SEARCH_CACHE_TTL > 0;
     this.cacheTTL = parseInt(process.env.META_SEARCH_CACHE_TTL) || 300;
@@ -260,28 +262,30 @@ class MetaSearchService {
       const client = target.client;
       const searchEndpoint = `${client.proxyUrl}/points/search`;
       
-      // Handle both vector and text queries
-      let requestBody;
+      // Convert text query to vector embedding
+      let searchVector;
       if (Array.isArray(searchParams.query)) {
-        // Vector search
-        requestBody = {
-          vector: searchParams.query,
-          limit: searchParams.limit,
-          score_threshold: searchParams.score_threshold,
-          with_payload: searchParams.with_payload
-        };
+        // Query is already a vector
+        searchVector = searchParams.query;
       } else {
-        // Text search - need to convert to vector first or use text search if available
-        // For now, assume the query needs to be converted to vector elsewhere
-        throw new Error('Text search not implemented for proxy collections. Please provide vector query.');
+        // Query is text, convert to vector
+        console.log(`Converting text query to vector for collection ${target.name}: "${searchParams.query}"`);
+        searchVector = await this.embeddingProvider.generateEmbedding(searchParams.query);
       }
+      
+      const requestBody = {
+        vector: searchVector,
+        limit: searchParams.limit,
+        score_threshold: searchParams.score_threshold,
+        with_payload: searchParams.with_payload
+      };
       
       const response = await axios.post(searchEndpoint, requestBody, {
         headers: {
           'Content-Type': 'application/json',
           'Api-Key': client.apiKey
         },
-        timeout: 10000 // 10 second timeout
+        timeout: 30000 // 30 second timeout for embedding + search
       });
 
       return response.data.result || response.data;
