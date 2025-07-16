@@ -374,7 +374,10 @@ export default function MetaSearch() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1">AI Model</label>
+                <label className="block text-xs font-medium mb-1">
+                  AI Model
+                  <span className="text-gray-500 ml-1">(for token counting)</span>
+                </label>
                 <select
                   value={searchConfig.model}
                   onChange={(e) => setSearchConfig({...searchConfig, model: e.target.value})}
@@ -385,6 +388,9 @@ export default function MetaSearch() {
                   <option value="claude">Claude</option>
                   <option value="claude-3">Claude 3</option>
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Used for accurate token counting and content sizing. Does not affect search results.
+                </p>
               </div>
               <div className="flex items-end">
                 <label className="flex items-center text-sm">

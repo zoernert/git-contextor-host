@@ -96,6 +96,10 @@ router.post('/collections', auth, async (req, res) => {
             name,
             collectionName: qdrantCollectionName,
             credentials,
+            tunnelInfo: {
+                proxyUrl: `${process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud'}/api/qdrant/collections/${qdrantCollectionName}`,
+                isManaged: true
+            },
             config: {
                 vectorSize,
                 distance,

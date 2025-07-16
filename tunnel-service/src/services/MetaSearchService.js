@@ -86,6 +86,10 @@ class MetaSearchService {
                 name: collection.name,
                 collectionName: collection.collectionName,
                 client: await this.getHostedClient(collection),
+                tunnelInfo: collection.tunnelInfo || {
+                  proxyUrl: collection.apiUrl,
+                  isManaged: true
+                },
                 weight: templateItem.weight || 1.0
               });
             }
@@ -126,6 +130,10 @@ class MetaSearchService {
           name: collection.name,
           collectionName: collection.collectionName,
           client: await this.getHostedClient(collection),
+          tunnelInfo: collection.tunnelInfo || {
+            proxyUrl: collection.apiUrl,
+            isManaged: true
+          },
           weight: 1.0
         });
       }
@@ -155,19 +163,28 @@ class MetaSearchService {
 
   async getHostedClient(collection) {
     try {
-      if (collection.credentials && collection.credentials.host) {
-        // Use collection-specific credentials
-        return new QdrantClient({
-          url: `${collection.credentials.host}:${collection.credentials.port || 6333}`,
-          apiKey: collection.credentials.apiKey,
-          checkCompatibility: false
-        });
-      } else {
-        // Use default Qdrant service
-        return QdrantService.client;
+      // SECURITY: Always use proxy URL for managed collections - never direct connection
+      const baseUrl = process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud';
+      const proxyUrl = `${baseUrl}/api/qdrant/collections/${collection.uuid}`;
+      
+      // Get user's API key for authentication
+      const User = require('../models/User');
+      const user = await User.findById(collection.userId);
+      if (!user) {
+        throw new Error('User not found for collection');
       }
+      
+      // Return proxy client configuration for managed collections
+      return {
+        isProxyClient: true,
+        proxyUrl: proxyUrl,
+        apiKey: user.apiKey,
+        collectionName: collection.name, // Use user-friendly name
+        internalCollectionName: collection.collectionName, // Internal Qdrant name
+        collection: collection
+      };
     } catch (error) {
-      console.error(`Failed to create Qdrant client for collection ${collection.name}:`, error);
+      console.error(`Failed to create proxy client for collection ${collection.name}:`, error);
       throw error;
     }
   }
@@ -206,7 +223,13 @@ class MetaSearchService {
 
       let results;
       if (target.type === 'hosted') {
-        results = await target.client.search(target.collectionName, searchParams);
+        // For managed collections, use proxy endpoint
+        if (target.client.isProxyClient) {
+          results = await this.searchProxyCollection(target, searchParams);
+        } else {
+          // Fallback for direct Qdrant client (deprecated)
+          results = await target.client.search(target.collectionName, searchParams);
+        }
       } else {
         // For tunnel collections, use HTTP API
         results = await this.searchTunnelCollection(target, searchParams);
@@ -229,6 +252,42 @@ class MetaSearchService {
         error: error.message,
         results: []
       };
+    }
+  }
+
+  async searchProxyCollection(target, searchParams) {
+    try {
+      const client = target.client;
+      const searchEndpoint = `${client.proxyUrl}/points/search`;
+      
+      // Handle both vector and text queries
+      let requestBody;
+      if (Array.isArray(searchParams.query)) {
+        // Vector search
+        requestBody = {
+          vector: searchParams.query,
+          limit: searchParams.limit,
+          score_threshold: searchParams.score_threshold,
+          with_payload: searchParams.with_payload
+        };
+      } else {
+        // Text search - need to convert to vector first or use text search if available
+        // For now, assume the query needs to be converted to vector elsewhere
+        throw new Error('Text search not implemented for proxy collections. Please provide vector query.');
+      }
+      
+      const response = await axios.post(searchEndpoint, requestBody, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Api-Key': client.apiKey
+        },
+        timeout: 10000 // 10 second timeout
+      });
+
+      return response.data.result || response.data;
+    } catch (error) {
+      console.error(`Proxy search failed for ${target.name}:`, error);
+      throw error;
     }
   }
 

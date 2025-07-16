@@ -11,6 +11,12 @@ const QdrantCollectionSchema = new mongoose.Schema({
     port: Number,
     apiKey: String
   },
+  // Tunnel information for managed collections
+  tunnelInfo: {
+    tunnelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Tunnel' },
+    proxyUrl: String,
+    isManaged: { type: Boolean, default: true } // All collections are managed through proxy
+  },
   usage: {
     vectorCount: { type: Number, default: 0 },
     storageUsed: { type: Number, default: 0 },
@@ -37,11 +43,21 @@ QdrantCollectionSchema.index({ collectionName: 1 });
 QdrantCollectionSchema.index({ uuid: 1 });
 QdrantCollectionSchema.index({ userId: 1, name: 1 });
 
-// Pre-save hook to ensure UUID is set
+// Pre-save hook to ensure UUID is set and tunnelInfo is populated
 QdrantCollectionSchema.pre('save', function(next) {
     if (!this.uuid) {
         this.uuid = uuidv4();
     }
+    
+    // Ensure tunnelInfo is populated for managed collections
+    if (!this.tunnelInfo) {
+        const baseUrl = process.env.TUNNEL_BASE_URL || 'https://tunnel.corrently.cloud';
+        this.tunnelInfo = {
+            proxyUrl: `${baseUrl}/api/qdrant/collections/${this.uuid}`,
+            isManaged: true
+        };
+    }
+    
     next();
 });
 
